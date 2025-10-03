@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=67", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "infinite-kids-canvas-ai-agent"
+version = "0.1.0"
+description = "AI patch generation microservice"
+authors = [{ name = "KidsCanvas Team" }]
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.110.0",
+    "pydantic-settings>=2.2.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "black>=24.3.0",
+    "ruff>=0.3.0",
+    "pytest>=8.1.0",
+    "httpx>=0.27.0",
+]
+
+[tool.black]
+line-length = 88
+target-version = ["py311"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+select = ["E", "F", "B", "Q", "I"]
+ignore = ["B008"]
+
+[tool.pytest.ini_options]
+testpaths = ["app/tests"]
