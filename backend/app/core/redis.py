@@ -27,6 +27,12 @@ class InMemoryRedis:
             return items[start:]
         return items[start : end + 1]
 
+    async def lpop(self, key: str) -> str | None:
+        items = self._lists.get(key)
+        if not items:
+            return None
+        return items.pop(0)
+
     async def publish(self, channel: str, message: str) -> None:  # pragma: no cover - not used yet
         self._lists[channel].append(message)
 
@@ -43,12 +49,26 @@ class RedisWrapper:
         else:
             self._client = InMemoryRedis()
 
-    async def enqueue_turn_event(self, key: str, payload: dict[str, Any]) -> None:
+    async def enqueue_json(self, key: str, payload: dict[str, Any]) -> None:
         await self._client.rpush(key, json.dumps(payload))
 
     async def list_events(self, key: str) -> list[dict[str, Any]]:
         raw = await self._client.lrange(key, 0, -1)
         return [json.loads(item) for item in raw]
+
+    async def pop_event(self, key: str) -> dict[str, Any] | None:
+        if hasattr(self._client, "lpop"):
+            raw = await self._client.lpop(key)
+        else:  # pragma: no cover - redis client fallback
+            raw = None
+        if raw is None:
+            return None
+        if isinstance(raw, bytes):  # pragma: no cover - redis client
+            raw = raw.decode()
+        return json.loads(raw)
+
+    async def enqueue_turn_event(self, key: str, payload: dict[str, Any]) -> None:
+        await self.enqueue_json(key, payload)
 
     async def raw_client(self) -> Any:  # pragma: no cover - used for dependency overrides
         return self._client

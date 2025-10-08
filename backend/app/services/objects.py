@@ -12,6 +12,7 @@ from ..core.redis import RedisWrapper
 from ..models import AnchorRing, BBox, CanvasObject, ObjectStatus, Room, Stroke, Turn
 from .audit import record_audit_event
 from .turns import create_turn_for_object
+from .strokes import broadcast_object_event
 
 
 @dataclass(frozen=True)
@@ -126,6 +127,22 @@ async def create_object(
         room=room,
         object_id=canvas_object.id,
         user_id=owner_id,
+    )
+
+    await broadcast_object_event(
+        redis,
+        room_id=room.id,
+        payload={
+            "id": str(canvas_object.id),
+            "roomId": str(room.id),
+            "ownerId": str(owner_id),
+            "label": canvas_object.label,
+            "status": canvas_object.status,
+            "bbox": canvas_object.bbox.to_dict(),
+            "anchorRing": canvas_object.anchor_ring.to_dict(),
+            "createdAt": canvas_object.created_at.isoformat(),
+            "turnId": str(turn.id),
+        },
     )
 
     return canvas_object, turn, room

@@ -2,6 +2,7 @@ from uuid import uuid4
 
 import asyncio
 import math
+from uuid import uuid4
 
 from ..api.routes.rooms import commit_object
 from ..core.database import Database
@@ -86,7 +87,7 @@ async def _run_commit_object_flow() -> None:
         assert len(audit_logs) == 2
         assert {log.event_type for log in audit_logs} == {"object.committed", "turn.created"}
 
-    queue_items = await redis.list_events(f"room:{room_id}:turn_queue")
+    queue_items = await redis.list_events("turn:events")
     assert len(queue_items) == 1
     queued_event = queue_items[0]
     assert queued_event["event"] == "turn.waiting_for_ai"

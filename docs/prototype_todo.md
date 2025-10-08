@@ -29,13 +29,13 @@
 
 ## 建議待辦與優先順序
 
-### Phase 1：最小可用迴路（Backend / Realtime）
+### Phase 1：最小可用迴路（Backend / Realtime） — ✅ 已完成
 1. **房間與使用者流程**：新增房間建立/加入 API，定義使用者身份（host/participant）及回傳目前 strokes/objects snapshot。
 2. **Stroke API 與佇列**：實作 `/api/rooms/{roomId}/strokes`（POST + 批次 GET）與對應的 WS broadcast 事件，確保畫布同步基礎可運作。
 3. **WS Protocol 套件化**：定義統一訊息格式（含 `topic`, `payload`, `timestamp`），補上 reconnect/心跳回應處理與錯誤回傳。
 4. **AI Turn webhook**：補上 turn queue 消費者（可先在 backend 內部使用 asyncio task），呼叫 AI Agent `/generate` 並寫入回合結果（含安全狀態 placeholder）。
 
-### Phase 2：前端 Canvas Prototype
+### Phase 2：前端 Canvas Prototype — ✅ 已完成
 1. **Canvas 繪圖工具列**：使用原生 TS 建立無限畫布（平移、縮放、筆寬/顏色、觸控手勢）。
 2. **WebSocket 同步**：串接 Realtime Gateway，實作 stroke buffering、節流與遠端筆劃渲染。
 3. **物件提交 UI**：提供合併筆劃為物件的流程（框選 or 選擇列表），並呼叫 backend object API。
