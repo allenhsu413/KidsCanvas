@@ -223,31 +223,32 @@ sequenceDiagram
 ```
 
 ## 🧑‍💻 開發規範（給 Code Agent 的硬性規定）
-•	語言/框架：Backend 用 Python 3.11 + FastAPI；WS 用 websockets 或 fastapi[websockets]；前端先用原生 TS + Canvas（後續可換 React/Flutter）。
-•	資料庫：PostgreSQL（永續）＋ Redis（即時暫存與事件快取）。
-•	端點/通道：
-•	POST /api/rooms/{roomId}/objects 建物件（含 bbox）
-•	WS /ws/rooms/{roomId} 廣播筆劃 / 事件（topic: stroke, object, turn）
-•	POST /api/turns/{turnId}/retry 僅管理者或家長可觸發
-•	程式風格：Python 遵循 PEP8，強制 black + ruff；前端 eslint + prettier。
-•	測試：pytest -q 覆蓋率 ≥ 80%；WS 行為以 pytest-asyncio。
-•	提交/PR：
-•	Commit：[module] action: summary
-•	PR 必附：測試結果、風險說明（效能/安全/相依）
+- 語言/框架：Backend 用 Python 3.11 + FastAPI；WS 用 websockets 或 fastapi[websockets]；前端先用原生 TS + Canvas（後續可換 React/Flutter）。
+- 資料庫：PostgreSQL（永續）＋ Redis（即時暫存與事件快取）。
+- 端點/通道：
+	- POST /api/rooms/{roomId}/objects 建物件（含 bbox）
+	- WS /ws/rooms/{roomId} 廣播筆劃 / 事件（topic: stroke, object, turn）
+	- POST /api/turns/{turnId}/retry 僅管理者或家長可觸發
+- 程式風格：Python 遵循 PEP8，強制 black + ruff；前端 eslint + prettier。
+- 測試：pytest -q 覆蓋率 ≥ 80%；WS 行為以 pytest-asyncio。
+- 提交/PR：
+	- Commit：[module] action: summary
+	- PR 必附：測試結果、風險說明（效能/安全/相依）
 
 ## 🛡️ 兒童安全與風格規範（必遵守）
-•	風格：童話故事風、明亮色調、友善角色；避免寫實暴力/血腥。
-•	禁用清單：暴力、成人、酒藥槍、仇恨、恐怖驚嚇、危險行為、個資。
-•	安全流程：
-	1.	文本提示過濾 → 2) 影像安全偵測（分類/NSFW/暴力）→ 3) 失敗則遮罩＋回覆安全建議。
-•	記錄：所有 AI 產出與安全判定需留審計日誌。
+- 風格：童話故事風、明亮色調、友善角色；避免寫實暴力/血腥。
+- 禁用清單：暴力、成人、酒藥槍、仇恨、恐怖驚嚇、危險行為、個資。
+- 安全流程：
+	- 	1.	文本提示過濾 → 2) 影像安全偵測（分類/NSFW/暴力）→ 3) 失敗則遮罩＋回覆安全建議。
+- 記錄：所有 AI 產出與安全判定需留審計日誌。
 
 ## 🧮 幾何與擺放（Anchor Ring 規則）
-•	從 Object.bbox 擴張為外環（padding = max(物件寬高)*0.4），形成環帶。
-•	AI Patch 只能落在此環帶；若與其他元素重疊 > 30% 則重新取樣位置。
-•	若畫面視窗無法容納，優先往視窗內縮放/平移，確保接龍「同屏可見」。
+- 從 Object.bbox 擴張為外環（padding = max(物件寬高)*0.4），形成環帶。
+- AI Patch 只能落在此環帶；若與其他元素重疊 > 30% 則重新取樣位置。
+- 若畫面視窗無法容納，優先往視窗內縮放/平移，確保接龍「同屏可見」。
 
 ## 🗂️ 專案目錄（建議）
+```
 /backend
   /app
     api/    # FastAPI routers
@@ -266,17 +267,18 @@ sequenceDiagram
 /docs
   AGENTS.md  # 本文件
   api.md
+```
 
 ## 接龍擺放（關鍵演算法）
 輸入：物件 bbox、目前畫面視窗（viewport）、既有元素 R-tree 索引
-•	步驟：
-	1.	以 bbox 中心為圓心，設定半徑 r = max(w,h)*k（k≈0.7~1.2），掃描角度 θ 找最近不重疊位置
-	2.	位置通過「同屏可見」檢查（與 viewport 交集 ≥ 70%）
-	3.	產出 anchorRegion（小多邊形或遮罩），交給 AI
+步驟：
+1.	以 bbox 中心為圓心，設定半徑 r = max(w,h)*k（k≈0.7~1.2），掃描角度 θ 找最近不重疊位置
+2.	位置通過「同屏可見」檢查（與 viewport 交集 ≥ 70%）
+3.	產出 anchorRegion（小多邊形或遮罩），交給 AI
 
 ## 內容安全（先規則、後模型）
-•	文本提示：關鍵字黑名單 + 模糊比對（例如 “刀/血/菸/酒/嚇/爆…”）
-•	圖像：採一個現成的安全分類器（NSFW/暴力），低風險起步；存疑則遮罩＋替代
+- 文本提示：關鍵字黑名單 + 模糊比對（例如 “刀/血/菸/酒/嚇/爆…”）
+- 圖像：採一個現成的安全分類器（NSFW/暴力），低風險起步；存疑則遮罩＋替代
 
 
 
