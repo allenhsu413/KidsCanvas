@@ -63,6 +63,19 @@ class Room:
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
+class RoomRole(StrEnum):
+    HOST = "host"
+    PARTICIPANT = "participant"
+
+
+@dataclass
+class RoomMember:
+    room_id: UUID
+    user_id: UUID
+    role: RoomRole
+    joined_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+
 @dataclass
 class Stroke:
     room_id: UUID
@@ -114,6 +127,7 @@ class AuditLog:
 
 MODEL_REGISTRY: Sequence[type] = (
     Room,
+    RoomMember,
     Stroke,
     CanvasObject,
     Turn,

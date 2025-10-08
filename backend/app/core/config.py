@@ -25,6 +25,15 @@ class AppSettings(BaseSettings):
     redis_url: str = Field(
         default="redis://localhost:6379/0", description="Redis connection URI"
     )
+    ai_agent_url: str = Field(
+        default="http://localhost:8100", description="Base URL for the AI agent"
+    )
+    enable_turn_worker: bool = Field(
+        default=True, description="Whether to start the background turn processor"
+    )
+    turn_worker_poll_interval: float = Field(
+        default=0.5, description="Polling interval for the turn worker"
+    )
 
 
 @lru_cache()

@@ -8,7 +8,7 @@ from ..core.redis import RedisWrapper
 from ..models import Room, Turn, TurnActor, TurnStatus
 from .audit import record_audit_event
 
-TURN_QUEUE_KEY = "room:{room_id}:turn_queue"
+TURN_QUEUE_KEY = "turn:events"
 
 
 async def create_turn_for_object(
@@ -43,9 +43,8 @@ async def create_turn_for_object(
         },
     )
 
-    queue_key = TURN_QUEUE_KEY.format(room_id=room.id)
     await redis.enqueue_turn_event(
-        queue_key,
+        TURN_QUEUE_KEY,
         {
             "event": "turn.waiting_for_ai",
             "turn_id": str(turn.id),
