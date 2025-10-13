@@ -7,7 +7,12 @@ from fastapi import APIRouter, Depends
 
 from ...core.database import DatabaseSession, get_db_session
 from ...core.redis import RedisWrapper, get_redis
-from ...schemas.strokes import StrokeBatchResponse, StrokeCreatePayload, StrokeCreateResponse
+from ...schemas.strokes import (
+    StrokeBatchResponse,
+    StrokeCreatePayload,
+    StrokeCreateResponse,
+    StrokeSchema,
+)
 from ...services.strokes import create_stroke, list_strokes as list_strokes_service
 
 router = APIRouter(prefix="/rooms/{room_id}/strokes", tags=["strokes"])
@@ -29,7 +34,7 @@ async def create_stroke_endpoint(
         color=payload.color,
         width=payload.width,
     )
-    return StrokeCreateResponse(stroke=stroke)
+    return StrokeCreateResponse(stroke=StrokeSchema.model_validate(stroke))
 
 
 @router.get("", response_model=StrokeBatchResponse)
@@ -38,4 +43,6 @@ async def list_strokes(
     session: DatabaseSession = Depends(get_db_session),
 ) -> StrokeBatchResponse:
     strokes = list_strokes_service(session, room_id=room_id)
-    return StrokeBatchResponse(strokes=list(strokes))
+    return StrokeBatchResponse(
+        strokes=[StrokeSchema.model_validate(stroke) for stroke in strokes]
+    )

@@ -10,6 +10,8 @@ from pydantic.config import ConfigDict
 
 
 class PointSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     x: float
     y: float
 
