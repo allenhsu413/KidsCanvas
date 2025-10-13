@@ -1,4 +1,4 @@
-import { WebSocketServer, WebSocket } from 'ws';
+import { WebSocketServer, WebSocket, RawData } from 'ws';
 import { loadConfig } from './config.js';
 
 type Topic = 'stroke' | 'object' | 'turn' | 'system';
@@ -17,10 +17,20 @@ type SystemPayload = {
   message?: string;
 };
 
+type RateLimiter = {
+  tokens: number;
+  capacity: number;
+  refillIntervalMs: number;
+  lastRefill: number;
+};
+
 type ConnectionContext = {
   roomId: string;
   userId?: string;
   joinedAt: number;
+  lastSeen: number;
+  isAlive: boolean;
+  rateLimiter: RateLimiter;
 };
 
 const config = loadConfig();
@@ -32,21 +42,116 @@ const context = new WeakMap<WebSocket, ConnectionContext>();
 
 const nowIso = () => new Date().toISOString();
 
+const createRateLimiter = (): RateLimiter => ({
+  capacity: config.rateLimit.burst,
+  tokens: config.rateLimit.burst,
+  refillIntervalMs: config.rateLimit.refillIntervalMs,
+  lastRefill: Date.now(),
+});
+
+const consumeRateLimit = (limiter: RateLimiter): boolean => {
+  const now = Date.now();
+  if (now - limiter.lastRefill >= limiter.refillIntervalMs) {
+    const intervals = Math.floor((now - limiter.lastRefill) / limiter.refillIntervalMs);
+    limiter.tokens = Math.min(
+      limiter.capacity,
+      limiter.tokens + intervals * limiter.capacity,
+    );
+    limiter.lastRefill += intervals * limiter.refillIntervalMs;
+  }
+  if (limiter.tokens <= 0) {
+    return false;
+  }
+  limiter.tokens -= 1;
+  return true;
+};
+
 const sendEnvelope = <T>(socket: WebSocket, envelope: MessageEnvelope<T>) => {
   if (socket.readyState === WebSocket.OPEN) {
     socket.send(JSON.stringify(envelope));
   }
 };
 
-const joinRoom = (socket: WebSocket, roomId: string, userId?: string) => {
+const ensureRoom = (roomId: string) => {
   if (!rooms.has(roomId)) {
     rooms.set(roomId, new Set());
   }
-  rooms.get(roomId)?.add(socket);
-  context.set(socket, { roomId, userId, joinedAt: Date.now() });
 };
 
-const leaveRoom = (socket: WebSocket) => {
+const payloadSize = (data: RawData): number => {
+  if (typeof data === 'string') {
+    return Buffer.byteLength(data);
+  }
+  if (Array.isArray(data)) {
+    return data.reduce((total, chunk) => total + payloadSize(chunk), 0);
+  }
+  if (Buffer.isBuffer(data)) {
+    return data.byteLength;
+  }
+  return Buffer.from(data).byteLength;
+};
+
+const bufferFromRawData = (data: RawData): Buffer => {
+  if (typeof data === 'string') {
+    return Buffer.from(data);
+  }
+  if (Array.isArray(data)) {
+    return Buffer.concat(data.map((chunk) => bufferFromRawData(chunk)));
+  }
+  if (Buffer.isBuffer(data)) {
+    return data;
+  }
+  return Buffer.from(data);
+};
+
+const announcePresence = (
+  roomId: string,
+  action: 'presence.join' | 'presence.leave' | 'presence.resume',
+  payload: SystemPayload,
+  sender?: WebSocket,
+) => {
+  broadcast(
+    roomId,
+    {
+      topic: 'system',
+      action,
+      roomId,
+      timestamp: nowIso(),
+      payload,
+    },
+    sender,
+  );
+};
+
+const joinRoom = (socket: WebSocket, roomId: string, userId?: string) => {
+  const existing = context.get(socket);
+  if (existing) {
+    if (existing.roomId !== roomId) {
+      leaveRoom(socket, 'switch');
+    } else {
+      existing.userId = userId;
+      existing.isAlive = true;
+      existing.lastSeen = Date.now();
+      ensureRoom(roomId);
+      rooms.get(roomId)?.add(socket);
+      return existing;
+    }
+  }
+  ensureRoom(roomId);
+  rooms.get(roomId)?.add(socket);
+  const meta: ConnectionContext = {
+    roomId,
+    userId,
+    joinedAt: Date.now(),
+    lastSeen: Date.now(),
+    isAlive: true,
+    rateLimiter: createRateLimiter(),
+  };
+  context.set(socket, meta);
+  return meta;
+};
+
+const leaveRoom = (socket: WebSocket, reason: 'leave' | 'disconnect' | 'switch' = 'leave') => {
   const meta = context.get(socket);
   if (!meta) return;
   const roomSockets = rooms.get(meta.roomId);
@@ -55,6 +160,18 @@ const leaveRoom = (socket: WebSocket) => {
     rooms.delete(meta.roomId);
   }
   context.delete(socket);
+  if (reason !== 'switch') {
+    announcePresence(
+      meta.roomId,
+      'presence.leave',
+      {
+        roomId: meta.roomId,
+        userId: meta.userId,
+        message: reason,
+      },
+      socket,
+    );
+  }
 };
 
 const broadcast = (roomId: string, message: MessageEnvelope, sender?: WebSocket) => {
@@ -94,12 +211,18 @@ const handleSystemMessage = (socket: WebSocket, envelope: MessageEnvelope<System
         action: 'ack',
         roomId,
         timestamp: nowIso(),
-        payload: { message: 'joined', roomId, userId },
+        payload: { message: action, roomId, userId },
       });
+      announcePresence(
+        roomId,
+        action === 'resume' ? 'presence.resume' : 'presence.join',
+        { roomId, userId },
+        socket,
+      );
       break;
     }
     case 'leave': {
-      leaveRoom(socket);
+      leaveRoom(socket, 'leave');
       sendEnvelope(socket, {
         topic: 'system',
         action: 'ack',
@@ -152,9 +275,21 @@ const normaliseEnvelope = (incoming: Record<string, unknown>, socket: WebSocket)
 };
 
 server.on('connection', (socket) => {
+  socket.on('pong', () => {
+    const meta = context.get(socket);
+    if (meta) {
+      meta.isAlive = true;
+      meta.lastSeen = Date.now();
+    }
+  });
+
   socket.on('message', (data) => {
     try {
-      const parsed = JSON.parse(data.toString()) as Record<string, unknown>;
+      if (payloadSize(data) > config.maxPayloadBytes) {
+        sendError(socket, 'Payload too large');
+        return;
+      }
+      const parsed = JSON.parse(bufferFromRawData(data).toString()) as Record<string, unknown>;
       const envelope = normaliseEnvelope(parsed, socket);
       if (envelope.topic === 'system') {
         handleSystemMessage(socket, envelope as MessageEnvelope<SystemPayload>);
@@ -163,6 +298,15 @@ server.on('connection', (socket) => {
       const meta = context.get(socket);
       if (!meta || meta.roomId !== envelope.roomId) {
         sendError(socket, 'Join the room before sending events', { roomId: envelope.roomId });
+        return;
+      }
+      meta.lastSeen = Date.now();
+      meta.isAlive = true;
+      if (!consumeRateLimit(meta.rateLimiter)) {
+        sendError(socket, 'Rate limit exceeded', {
+          roomId: envelope.roomId,
+          retryInMs: meta.rateLimiter.refillIntervalMs,
+        });
         return;
       }
       const message = {
@@ -177,7 +321,7 @@ server.on('connection', (socket) => {
   });
 
   socket.on('close', () => {
-    leaveRoom(socket);
+    leaveRoom(socket, 'disconnect');
   });
 });
 
@@ -188,6 +332,17 @@ server.on('listening', () => {
 const heartbeat = () => {
   for (const sockets of rooms.values()) {
     for (const socket of sockets) {
+      const meta = context.get(socket);
+      if (!meta) {
+        continue;
+      }
+      if (!meta.isAlive && Date.now() - meta.lastSeen > config.heartbeatToleranceMs) {
+        console.warn('Terminating stale connection', meta.roomId, meta.userId);
+        socket.terminate();
+        leaveRoom(socket, 'disconnect');
+        continue;
+      }
+      meta.isAlive = false;
       if (socket.readyState === WebSocket.OPEN) {
         socket.ping();
       }

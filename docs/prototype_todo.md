@@ -13,6 +13,7 @@
 ### Realtime Gateway
 - 已有基於 `ws` 套件的 WebSocket 伺服器，能按房間維持連線、接收 stroke/object/turn 主題訊息並轉發給其他客戶端。【F:realtime/src/index.ts†L1-L83】
 - Heartbeat/ping 機制與基本環境設定載入已就緒，但尚未串接後端或持久化訊息。【F:realtime/src/index.ts†L85-L98】【F:realtime/src/config.ts†L1-L10】
+- 完成連線強韌性優化：新增 payload 大小防護、速率限制、presence 廣播與超時終止閒置連線，並提供環境變數調校的設定檔匯入。【F:realtime/src/index.ts†L19-L218】【F:realtime/src/config.ts†L1-L28】
 
 ### AI Agent
 - FastAPI 服務已建立 `/generate` 端點，並透過 `PatchGenerationPipeline` 回傳童話風格的佔位 patch payload，可作為整合時的假資料來源。【F:ai_agent/app/main.py†L1-L17】【F:ai_agent/app/pipelines/patch_generation.py†L1-L18】
