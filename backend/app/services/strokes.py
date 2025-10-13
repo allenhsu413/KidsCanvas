@@ -13,6 +13,7 @@ from ..models import Point, Room, Stroke
 from .audit import record_audit_event
 
 WS_EVENT_STREAM = "ws:events"
+OBJECT_EVENT_STREAM = "ws:object-events"
 
 
 def _ensure_room(session: DatabaseSession, room_id: UUID) -> Room:
@@ -99,7 +100,7 @@ async def broadcast_object_event(
     payload: dict[str, object],
 ) -> None:
     await redis.enqueue_json(
-        WS_EVENT_STREAM,
+        OBJECT_EVENT_STREAM,
         {
             "topic": "object",
             "roomId": str(room_id),
