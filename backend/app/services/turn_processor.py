@@ -5,10 +5,35 @@ import asyncio
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Iterable
 from uuid import UUID
 
 import httpx
+
+try:
+    from content_safety.app.policies.moderation import ModerationEngine, SafetyResult
+except Exception:  # pragma: no cover - fallback when package unavailable
+    from dataclasses import dataclass as _dataclass
+
+    @_dataclass(slots=True)
+    class SafetyResult:  # type: ignore[redefinition]
+        category: str
+        passed: bool
+        reasons: list[str]
+
+    class ModerationEngine:  # type: ignore[redefinition]
+        def __init__(self) -> None:  # pragma: no cover - minimal fallback
+            self._banned = ["violence", "blood", "weapon", "scary", "alcohol"]
+
+        def evaluate_text(self, text: str) -> SafetyResult:
+            lowered = text.lower()
+            triggers = [kw for kw in self._banned if kw in lowered]
+            return SafetyResult(category="text", passed=not triggers, reasons=triggers)
+
+        def evaluate_labels(self, labels: Iterable[str]) -> SafetyResult:
+            lowered = [label.lower() for label in labels]
+            triggers = [kw for kw in self._banned if kw in lowered]
+            return SafetyResult(category="image", passed=not triggers, reasons=triggers)
 
 from ..core.database import Database, get_database
 from ..core.redis import RedisWrapper
@@ -16,6 +41,31 @@ from ..models import CanvasObject, Turn, TurnActor, TurnStatus
 from .audit import record_audit_event
 from .strokes import WS_EVENT_STREAM
 from .turns import TURN_QUEUE_KEY
+
+
+@dataclass(slots=True)
+class SafetySummary:
+    """Aggregate moderation outcomes for a generated patch."""
+
+    results: list[SafetyResult]
+
+    @property
+    def passed(self) -> bool:
+        return all(result.passed for result in self.results)
+
+    def to_payload(self) -> dict[str, Any]:
+        return {
+            "passed": self.passed,
+            "results": [
+                {
+                    "category": result.category,
+                    "passed": result.passed,
+                    "reasons": result.reasons,
+                }
+                for result in self.results
+            ],
+            "reasons": [reason for result in self.results for reason in result.reasons],
+        }
 
 
 @dataclass
@@ -46,6 +96,7 @@ class TurnProcessor:
         poll_interval: float = 0.5,
         database: Database | None = None,
         client: httpx.AsyncClient | None = None,
+        moderation_engine: ModerationEngine | None = None,
     ) -> None:
         self._redis = redis
         self._agent_url = agent_url.rstrip("/")
@@ -55,6 +106,7 @@ class TurnProcessor:
         self._task: asyncio.Task[None] | None = None
         self._client: httpx.AsyncClient | None = client
         self._owns_client = client is None
+        self._moderation = moderation_engine or ModerationEngine()
 
     async def start(self) -> None:
         if self._task is not None and not self._task.done():  # pragma: no cover - defensive
@@ -112,7 +164,17 @@ class TurnProcessor:
 
         patch = data.get("patch", {})
         cache_dir = data.get("cacheDir")
-        await self._mark_turn_completed(event, turn_snapshot, patch, cache_dir)
+
+        safety = self._run_safety_checks(object_snapshot, patch)
+        if not safety.passed:
+            await self._mark_turn_blocked(
+                event,
+                reason="policy_violation",
+                safety=safety,
+            )
+            return
+
+        await self._mark_turn_completed(event, turn_snapshot, patch, cache_dir, safety)
 
     async def _load_turn_context(self, event: TurnEvent) -> tuple[CanvasObject | None, Turn | None]:
         database = self._database
@@ -135,6 +197,7 @@ class TurnProcessor:
         turn: Turn,
         patch: dict[str, Any],
         cache_dir: Any,
+        safety: "SafetySummary",
     ) -> None:
         database = self._database
         async with database.transaction() as session:
@@ -156,6 +219,7 @@ class TurnProcessor:
                     "patch": patch,
                     "cache_dir": cache_dir,
                     "status": turn.status,
+                    "safety": safety.to_payload(),
                 },
             )
 
@@ -170,12 +234,19 @@ class TurnProcessor:
                     "sequence": event.sequence,
                     "status": TurnStatus.AI_COMPLETED,
                     "safetyStatus": "passed",
+                    "safety": safety.to_payload(),
                     "patch": patch,
                 },
             },
         )
 
-    async def _mark_turn_blocked(self, event: TurnEvent, *, reason: str) -> None:
+    async def _mark_turn_blocked(
+        self,
+        event: TurnEvent,
+        *,
+        reason: str,
+        safety: "SafetySummary" | None = None,
+    ) -> None:
         database = self._database
         async with database.transaction() as session:
             try:
@@ -183,8 +254,12 @@ class TurnProcessor:
             except LookupError:  # pragma: no cover - already deleted
                 return
             turn.status = TurnStatus.BLOCKED
-            turn.current_actor = TurnActor.AI
-            turn.safety_status = "error"
+            if safety is None:
+                turn.current_actor = TurnActor.AI
+                turn.safety_status = "error"
+            else:
+                turn.current_actor = TurnActor.PLAYER
+                turn.safety_status = "blocked"
             turn.updated_at = datetime.now(timezone.utc)
             await record_audit_event(
                 session,
@@ -194,6 +269,7 @@ class TurnProcessor:
                 payload={
                     "sequence": turn.sequence,
                     "reason": reason,
+                    "safety": safety.to_payload() if safety is not None else None,
                 },
             )
 
@@ -207,11 +283,32 @@ class TurnProcessor:
                     "turnId": str(event.turn_id),
                     "sequence": event.sequence,
                     "status": TurnStatus.BLOCKED,
-                    "safetyStatus": "error",
+                    "safetyStatus": "error" if safety is None else "blocked",
                     "reason": reason,
+                    "safety": safety.to_payload() if safety is not None else None,
                 },
             },
         )
+
+    def _run_safety_checks(self, canvas_object: CanvasObject, patch: dict[str, Any]) -> "SafetySummary":
+        results: list[SafetyResult] = []
+        instructions = patch.get("instructions")
+        if isinstance(instructions, str) and instructions.strip():
+            results.append(self._moderation.evaluate_text(instructions))
+
+        labels: list[str] = []
+        patch_labels = patch.get("labels")
+        if isinstance(patch_labels, list):
+            labels.extend([str(label) for label in patch_labels if isinstance(label, str)])
+        if canvas_object.label:
+            labels.append(canvas_object.label)
+        if labels:
+            results.append(self._moderation.evaluate_labels(labels))
+
+        if not results:
+            results.append(SafetyResult(category="text", passed=True, reasons=[]))
+
+        return SafetySummary(results)
 
 
 @asynccontextmanager

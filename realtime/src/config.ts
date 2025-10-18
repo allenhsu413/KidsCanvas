@@ -10,6 +10,8 @@ export interface GatewayConfig {
   heartbeatToleranceMs: number;
   maxPayloadBytes: number;
   rateLimit: RateLimitConfig;
+  gameServiceUrl: string;
+  eventPollIntervalMs: number;
 }
 
 const numberFromEnv = (key: string, fallback: number): number => {
@@ -31,4 +33,6 @@ export const loadConfig = (): GatewayConfig => ({
     burst: numberFromEnv('GATEWAY_RATE_LIMIT_BURST', 40),
     refillIntervalMs: numberFromEnv('GATEWAY_RATE_LIMIT_REFILL_MS', 1000),
   },
+  gameServiceUrl: process.env.GAME_SERVICE_URL ?? 'http://localhost:8000',
+  eventPollIntervalMs: numberFromEnv('GATEWAY_EVENT_POLL_MS', 250),
 });
