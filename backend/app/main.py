@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from .api.routes.events import router as events_router
 from .api.routes.health import router as health_router
 from .api.routes.rooms import router as rooms_router
 from .api.routes.strokes import router as strokes_router
@@ -39,6 +40,7 @@ def create_app() -> FastAPI:
     app.include_router(health_router, prefix=f"{settings.api_prefix}/health", tags=["health"])
     app.include_router(rooms_router, prefix=settings.api_prefix)
     app.include_router(strokes_router, prefix=settings.api_prefix)
+    app.include_router(events_router, prefix=settings.api_prefix)
 
     return app
 

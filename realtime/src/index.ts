@@ -39,8 +39,11 @@ const server = new WebSocketServer({ host: config.host, port: config.port });
 
 const rooms = new Map<string, Set<WebSocket>>();
 const context = new WeakMap<WebSocket, ConnectionContext>();
+const eventEndpoint = new URL('/api/internal/events/next', config.gameServiceUrl).toString();
+let running = true;
 
 const nowIso = () => new Date().toISOString();
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const createRateLimiter = (): RateLimiter => ({
   capacity: config.rateLimit.burst,
@@ -181,6 +184,32 @@ const broadcast = (roomId: string, message: MessageEnvelope, sender?: WebSocket)
   for (const socket of roomSockets) {
     if (socket !== sender && socket.readyState === WebSocket.OPEN) {
       socket.send(raw);
+    }
+  }
+};
+
+const pollBackendEvents = async () => {
+  while (running) {
+    try {
+      const response = await fetch(eventEndpoint, {
+        headers: { Accept: 'application/json' },
+      });
+      if (response.status === 204) {
+        await sleep(config.eventPollIntervalMs);
+        continue;
+      }
+      if (!response.ok) {
+        console.error('[gateway] Failed to fetch backend event', response.status, response.statusText);
+        await sleep(1000);
+        continue;
+      }
+      const parsed = (await response.json()) as MessageEnvelope | null;
+      if (parsed && typeof parsed.roomId === 'string') {
+        broadcast(parsed.roomId, parsed);
+      }
+    } catch (error: unknown) {
+      console.error('[gateway] Event polling error', error);
+      await sleep(1000);
     }
   }
 };
@@ -327,6 +356,7 @@ server.on('connection', (socket) => {
 
 server.on('listening', () => {
   console.log(`Realtime Gateway listening on ws://${config.host}:${config.port}`);
+  void pollBackendEvents();
 });
 
 const heartbeat = () => {
@@ -351,3 +381,17 @@ const heartbeat = () => {
 };
 
 setInterval(heartbeat, config.heartbeatIntervalMs);
+
+const shutdown = async () => {
+  console.log('[gateway] Shutting down');
+  running = false;
+  server.close();
+};
+
+process.on('SIGINT', () => {
+  void shutdown().then(() => process.exit(0));
+});
+
+process.on('SIGTERM', () => {
+  void shutdown().then(() => process.exit(0));
+});

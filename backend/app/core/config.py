@@ -34,6 +34,10 @@ class AppSettings(BaseSettings):
     turn_worker_poll_interval: float = Field(
         default=0.5, description="Polling interval for the turn worker"
     )
+    state_file: str | None = Field(
+        default="data/state.json",
+        description="Path to JSON file used for prototype persistence (set to empty to disable)",
+    )
 
 
 @lru_cache()
