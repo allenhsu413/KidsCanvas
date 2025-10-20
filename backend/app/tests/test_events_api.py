@@ -6,12 +6,20 @@ from uuid import uuid4
 
 from ..api.routes.events import get_next_event
 from ..core.redis import RedisWrapper
+from ..core.security import AuthenticatedSubject, UserRole
 from ..services.strokes import OBJECT_EVENT_STREAM, WS_EVENT_STREAM
 
 
 def test_get_next_event_returns_204_when_empty() -> None:
     redis = RedisWrapper()
-    response = asyncio.run(get_next_event(redis=redis))
+    response = asyncio.run(
+        get_next_event(
+            redis=redis,
+            limit=1,
+            cursor=None,
+            _=AuthenticatedSubject(user_id=uuid4(), role=UserRole.MODERATOR),
+        )
+    )
     assert hasattr(response, "status_code")
     assert response.status_code == 204
 
@@ -36,7 +44,10 @@ def test_get_next_event_prioritises_oldest() -> None:
     asyncio.run(redis.enqueue_json(WS_EVENT_STREAM, newer_event))
     asyncio.run(redis.enqueue_json(OBJECT_EVENT_STREAM, older_event))
 
-    result = asyncio.run(get_next_event(redis=redis))
+    moderator = AuthenticatedSubject(user_id=uuid4(), role=UserRole.MODERATOR)
+    result = asyncio.run(get_next_event(redis=redis, limit=2, cursor=None, _=moderator))
     assert isinstance(result, dict)
-    assert result["timestamp"] == older_event["timestamp"]
-    assert result["topic"] == "object"
+    assert "cursor" in result
+    events = result["events"]
+    assert len(events) == 2
+    assert [event["topic"] for event in events] == ["turn", "object"]

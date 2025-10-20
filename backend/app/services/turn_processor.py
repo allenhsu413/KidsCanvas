@@ -180,13 +180,13 @@ class TurnProcessor:
         database = self._database
         async with database.transaction() as session:
             try:
-                turn = session.get_turn(event.turn_id)
+                turn = await session.get_turn(event.turn_id)
             except LookupError:
                 return None, None
             if turn.status != TurnStatus.WAITING_FOR_AI:
                 return None, None
             try:
-                canvas_object = session.get_object(event.object_id)
+                canvas_object = await session.get_object(event.object_id)
             except LookupError:
                 return None, None
             return canvas_object, turn
@@ -201,7 +201,7 @@ class TurnProcessor:
     ) -> None:
         database = self._database
         async with database.transaction() as session:
-            turn = session.get_turn(event.turn_id)
+            turn = await session.get_turn(event.turn_id)
             turn.status = TurnStatus.AI_COMPLETED
             turn.current_actor = TurnActor.PLAYER
             turn.safety_status = "passed"
@@ -222,6 +222,7 @@ class TurnProcessor:
                     "safety": safety.to_payload(),
                 },
             )
+            await session.update_turn(turn)
 
         await self._redis.enqueue_json(
             WS_EVENT_STREAM,
@@ -250,7 +251,7 @@ class TurnProcessor:
         database = self._database
         async with database.transaction() as session:
             try:
-                turn = session.get_turn(event.turn_id)
+                turn = await session.get_turn(event.turn_id)
             except LookupError:  # pragma: no cover - already deleted
                 return
             turn.status = TurnStatus.BLOCKED
@@ -272,6 +273,7 @@ class TurnProcessor:
                     "safety": safety.to_payload() if safety is not None else None,
                 },
             )
+            await session.update_turn(turn)
 
         await self._redis.enqueue_json(
             WS_EVENT_STREAM,

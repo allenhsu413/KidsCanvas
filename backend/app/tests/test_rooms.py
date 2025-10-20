@@ -1,8 +1,10 @@
 import asyncio
+import asyncio
 from uuid import uuid4
 
 from ..api.routes.rooms import create_room_endpoint, join_room_endpoint
 from ..core.database import Database
+from ..core.security import AuthenticatedSubject, UserRole
 from ..schemas.rooms import RoomCreatePayload, RoomJoinPayload
 
 
@@ -11,12 +13,17 @@ def test_room_create_and_join_snapshot() -> None:
 
 
 async def _run_room_flow() -> None:
-    db = Database()
+    db = Database(database_url="sqlite+aiosqlite:///:memory:")
+    await db.create_all()
     host_id = uuid4()
 
     create_payload = RoomCreatePayload(name="Story Time", host_id=host_id)
     async with db.transaction() as session:
-        create_response = await create_room_endpoint(payload=create_payload, session=session)
+        create_response = await create_room_endpoint(
+            payload=create_payload,
+            session=session,
+            subject=AuthenticatedSubject(user_id=host_id, role=UserRole.PLAYER),
+        )
 
     assert create_response.room.name == "Story Time"
     assert create_response.member.user_id == host_id
@@ -31,6 +38,7 @@ async def _run_room_flow() -> None:
             room_id=create_response.room.id,
             payload=join_payload,
             session=session,
+            subject=AuthenticatedSubject(user_id=participant_id, role=UserRole.PLAYER),
         )
 
     assert join_response.room.id == create_response.room.id

@@ -24,5 +24,5 @@ async def record_audit_event(
         event_type=event_type,
         payload=payload,
     )
-    session.append_audit_log(log)
+    await session.append_audit_log(log)
     return log

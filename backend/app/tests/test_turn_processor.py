@@ -1,11 +1,15 @@
 import asyncio
 from uuid import uuid4
 
+import asyncio
+from uuid import uuid4
+
 import httpx
 
 from ..api.routes.rooms import commit_object
 from ..core.database import Database
 from ..core.redis import RedisWrapper
+from ..core.security import AuthenticatedSubject, UserRole
 from ..models import Point, Room, Stroke, TurnActor, TurnStatus
 from ..schemas.objects import ObjectCreatePayload
 from ..services.turn_processor import TurnEvent, TurnProcessor
@@ -16,7 +20,8 @@ def test_turn_processor_completes_turn() -> None:
 
 
 async def _run_turn_processor() -> None:
-    db = Database()
+    db = Database(database_url="sqlite+aiosqlite:///:memory:")
+    await db.create_all()
     redis = RedisWrapper()
 
     room_id = uuid4()
@@ -32,12 +37,19 @@ async def _run_turn_processor() -> None:
         color="#000000",
         width=3.0,
     )
-    db.insert_room(room)
-    db.insert_stroke(stroke)
+    async with db.transaction() as session:
+        await session.save_room(room)
+        await session.save_stroke(stroke)
 
     payload = ObjectCreatePayload(owner_id=user_id, stroke_ids=[stroke_id])
     async with db.transaction() as session:
-        response = await commit_object(room_id=room_id, payload=payload, session=session, redis=redis)
+        response = await commit_object(
+            room_id=room_id,
+            payload=payload,
+            session=session,
+            redis=redis,
+            subject=AuthenticatedSubject(user_id=user_id, role=UserRole.PLAYER),
+        )
 
     object_events = await redis.list_events("ws:object-events")
     assert len(object_events) == 1
@@ -66,7 +78,7 @@ async def _run_turn_processor() -> None:
     await processor._process_event(event, client)
 
     async with db.transaction() as session:
-        turn = session.get_turn(response.turn.id)
+        turn = await session.get_turn(response.turn.id)
         assert turn.status == TurnStatus.AI_COMPLETED
         assert turn.current_actor == TurnActor.PLAYER
         assert turn.safety_status == "passed"
@@ -87,7 +99,8 @@ def test_turn_processor_blocks_on_safety() -> None:
 
 
 async def _run_turn_processor_blocked() -> None:
-    db = Database()
+    db = Database(database_url="sqlite+aiosqlite:///:memory:")
+    await db.create_all()
     redis = RedisWrapper()
 
     room_id = uuid4()
@@ -103,12 +116,19 @@ async def _run_turn_processor_blocked() -> None:
         color="#000000",
         width=3.0,
     )
-    db.insert_room(room)
-    db.insert_stroke(stroke)
+    async with db.transaction() as session:
+        await session.save_room(room)
+        await session.save_stroke(stroke)
 
     payload = ObjectCreatePayload(owner_id=user_id, stroke_ids=[stroke_id])
     async with db.transaction() as session:
-        response = await commit_object(room_id=room_id, payload=payload, session=session, redis=redis)
+        response = await commit_object(
+            room_id=room_id,
+            payload=payload,
+            session=session,
+            redis=redis,
+            subject=AuthenticatedSubject(user_id=user_id, role=UserRole.PLAYER),
+        )
 
     object_events = await redis.list_events("ws:object-events")
     assert len(object_events) == 1
@@ -140,7 +160,7 @@ async def _run_turn_processor_blocked() -> None:
     await processor._process_event(event, client)
 
     async with db.transaction() as session:
-        turn = session.get_turn(response.turn.id)
+        turn = await session.get_turn(response.turn.id)
         assert turn.status == TurnStatus.BLOCKED
         assert turn.safety_status == "blocked"
 

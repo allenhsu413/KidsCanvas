@@ -20,6 +20,7 @@ async def create_turn_for_object(
     user_id: UUID,
 ) -> Turn:
     room.turn_seq += 1
+    await session.update_room(room)
     turn = Turn(
         room_id=room.id,
         sequence=room.turn_seq,
@@ -27,7 +28,7 @@ async def create_turn_for_object(
         current_actor=TurnActor.AI,
         source_object_id=object_id,
     )
-    session.save_turn(turn)
+    await session.save_turn(turn)
 
     await record_audit_event(
         session,

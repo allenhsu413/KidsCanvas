@@ -12,6 +12,7 @@ from .api.routes.strokes import router as strokes_router
 from .core.config import get_settings
 from .core.redis import get_redis_wrapper
 from .services.turn_processor import TurnProcessor
+from .ws.rooms import router as rooms_ws_router
 
 
 def create_app() -> FastAPI:
@@ -41,6 +42,7 @@ def create_app() -> FastAPI:
     app.include_router(rooms_router, prefix=settings.api_prefix)
     app.include_router(strokes_router, prefix=settings.api_prefix)
     app.include_router(events_router, prefix=settings.api_prefix)
+    app.include_router(rooms_ws_router)
 
     return app
 
