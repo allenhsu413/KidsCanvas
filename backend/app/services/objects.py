@@ -73,12 +73,12 @@ async def create_object(
         )
 
     try:
-        room = session.get_room(room_id)
+        room = await session.get_room(room_id)
     except LookupError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Room not found") from None
 
     try:
-        strokes = session.get_strokes(room_id, stroke_ids)
+        strokes = await session.get_strokes(room_id, stroke_ids)
     except LookupError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -103,10 +103,10 @@ async def create_object(
         bbox=bbox.to_bbox(),
         anchor_ring=anchor_ring,
     )
-    session.save_object(canvas_object)
+    await session.save_object(canvas_object)
 
     for stroke in strokes:
-        session.update_stroke(stroke, object_id=canvas_object.id)
+        await session.update_stroke(stroke, object_id=canvas_object.id)
 
     await record_audit_event(
         session,

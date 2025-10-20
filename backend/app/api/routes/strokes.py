@@ -3,10 +3,11 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from ...core.database import DatabaseSession, get_db_session
 from ...core.redis import RedisWrapper, get_redis
+from ...core.security import AuthenticatedSubject, UserRole, require_roles
 from ...schemas.strokes import (
     StrokeBatchResponse,
     StrokeCreatePayload,
@@ -24,7 +25,14 @@ async def create_stroke_endpoint(
     payload: StrokeCreatePayload,
     session: DatabaseSession = Depends(get_db_session),
     redis: RedisWrapper = Depends(get_redis),
+    subject: AuthenticatedSubject = Depends(
+        require_roles(UserRole.PLAYER, UserRole.MODERATOR, UserRole.PARENT)
+    ),
 ) -> StrokeCreateResponse:
+    if subject.role == UserRole.PLAYER and payload.author_id != subject.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="cannot_draw_for_other_user"
+        )
     stroke = await create_stroke(
         session,
         redis,
@@ -41,8 +49,11 @@ async def create_stroke_endpoint(
 async def list_strokes(
     room_id: UUID,
     session: DatabaseSession = Depends(get_db_session),
+    subject: AuthenticatedSubject = Depends(
+        require_roles(UserRole.PLAYER, UserRole.MODERATOR, UserRole.PARENT)
+    ),
 ) -> StrokeBatchResponse:
-    strokes = list_strokes_service(session, room_id=room_id)
+    strokes = await list_strokes_service(session, room_id=room_id)
     return StrokeBatchResponse(
         strokes=[StrokeSchema.model_validate(stroke) for stroke in strokes]
     )

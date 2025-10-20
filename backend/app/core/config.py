@@ -25,6 +25,15 @@ class AppSettings(BaseSettings):
     redis_url: str = Field(
         default="redis://localhost:6379/0", description="Redis connection URI"
     )
+    auth_secret_key: str = Field(
+        default="dev-secret", description="HMAC secret for signing access tokens"
+    )
+    auth_algorithm: str = Field(
+        default="HS256", description="JWT signing algorithm"
+    )
+    access_token_expire_minutes: int = Field(
+        default=60, description="Access token lifetime in minutes"
+    )
     ai_agent_url: str = Field(
         default="http://localhost:8100", description="Base URL for the AI agent"
     )

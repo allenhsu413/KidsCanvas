@@ -7,6 +7,7 @@ from uuid import uuid4
 from ..api.routes.rooms import commit_object
 from ..core.database import Database
 from ..core.redis import RedisWrapper
+from ..core.security import AuthenticatedSubject, UserRole
 from ..models import ObjectStatus, Point, Room, Stroke, TurnActor, TurnStatus
 from ..schemas.objects import ObjectCreatePayload
 
@@ -16,7 +17,8 @@ def test_commit_object_creates_turn_and_audit() -> None:
 
 
 async def _run_commit_object_flow() -> None:
-    db = Database()
+    db = Database(database_url="sqlite+aiosqlite:///:memory:")
+    await db.create_all()
     redis = RedisWrapper()
 
     room_id = uuid4()
@@ -33,8 +35,9 @@ async def _run_commit_object_flow() -> None:
         width=4.0,
     )
 
-    db.insert_room(room)
-    db.insert_stroke(stroke)
+    async with db.transaction() as session:
+        await session.save_room(room)
+        await session.save_stroke(stroke)
 
     payload = ObjectCreatePayload(owner_id=user_id, stroke_ids=[stroke_id], label="castle")
 
@@ -44,6 +47,7 @@ async def _run_commit_object_flow() -> None:
             payload=payload,
             session=session,
             redis=redis,
+            subject=AuthenticatedSubject(user_id=user_id, role=UserRole.PLAYER),
         )
 
     obj_payload = response.object
@@ -71,19 +75,19 @@ async def _run_commit_object_flow() -> None:
     assert turn_payload.current_actor == TurnActor.AI
 
     async with db.transaction() as session:
-        stored_object = session.get_object(obj_payload.id)
+        stored_object = await session.get_object(obj_payload.id)
         assert stored_object.status == ObjectStatus.COMMITTED
 
-        stored_turn = session.get_turn(turn_payload.id)
+        stored_turn = await session.get_turn(turn_payload.id)
         assert stored_turn.sequence == 1
 
-        updated_stroke = session.get_stroke(stroke_id)
+        updated_stroke = await session.get_stroke(stroke_id)
         assert updated_stroke.object_id == stored_object.id
 
-        updated_room = session.get_room(room_id)
+        updated_room = await session.get_room(room_id)
         assert updated_room.turn_seq == 1
 
-        audit_logs = session.list_audit_logs(room_id)
+        audit_logs = await session.list_audit_logs(room_id)
         assert len(audit_logs) == 2
         assert {log.event_type for log in audit_logs} == {"object.committed", "turn.created"}
 

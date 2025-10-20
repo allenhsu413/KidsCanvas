@@ -19,13 +19,14 @@ from ..models import (
 )
 
 
-def test_database_persistence_roundtrip(tmp_path) -> None:
-    path = tmp_path / "state.json"
-    asyncio.run(_exercise_database(path))
+def test_database_roundtrip() -> None:
+    asyncio.run(_exercise_database())
 
 
-async def _exercise_database(path) -> None:
-    db = Database(storage_path=path)
+async def _exercise_database() -> None:
+    db = Database(database_url="sqlite+aiosqlite:///:memory:")
+    await db.create_all()
+
     room_id = uuid4()
     user_id = uuid4()
 
@@ -73,26 +74,23 @@ async def _exercise_database(path) -> None:
     )
 
     async with db.transaction() as session:
-        session.save_room(room)
-        session.save_room_member(member)
-        session.save_object(canvas_object)
-        session.save_stroke(stroke)
-        session.save_turn(turn)
-        session.append_audit_log(audit_log)
+        await session.save_room(room)
+        await session.save_room_member(member)
+        await session.save_object(canvas_object)
+        await session.save_stroke(stroke)
+        await session.save_turn(turn)
+        await session.append_audit_log(audit_log)
 
-    assert path.exists()
-
-    db_reloaded = Database(storage_path=path)
-    async with db_reloaded.transaction() as session:
-        loaded_room = session.get_room(room_id)
+    async with db.transaction() as session:
+        loaded_room = await session.get_room(room_id)
         assert loaded_room.name == "Persistent Room"
-        strokes = session.list_strokes(room_id)
+        strokes = await session.list_strokes(room_id)
         assert len(strokes) == 1
         assert strokes[0].object_id == canvas_object.id
-        loaded_object = session.get_object(canvas_object.id)
+        loaded_object = await session.get_object(canvas_object.id)
         assert loaded_object.anchor_ring.outer.width == outer_bbox.width
-        loaded_turn = session.get_turn(turn.id)
+        loaded_turn = await session.get_turn(turn.id)
         assert loaded_turn.ai_patch_uri == "/cache/mock.png"
         assert loaded_turn.safety_status == "passed"
-        logs = session.list_audit_logs(room_id)
+        logs = await session.list_audit_logs(room_id)
         assert logs and logs[0].payload["ok"] is True

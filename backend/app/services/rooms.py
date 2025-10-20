@@ -31,8 +31,8 @@ async def create_room(
     room = Room(name=name)
     member = RoomMember(room_id=room.id, user_id=host_id, role=RoomRole.HOST)
 
-    session.save_room(room)
-    session.save_room_member(member)
+    await session.save_room(room)
+    await session.save_room_member(member)
 
     await record_audit_event(
         session,
@@ -64,22 +64,22 @@ async def join_room(
     user_id: UUID,
 ) -> RoomSnapshot:
     try:
-        room = session.get_room(room_id)
+        room = await session.get_room(room_id)
     except LookupError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Room not found") from None
 
     try:
-        member = session.get_room_member(room_id, user_id)
+        member = await session.get_room_member(room_id, user_id)
         is_new_member = False
     except LookupError:
         member = RoomMember(room_id=room.id, user_id=user_id, role=RoomRole.PARTICIPANT)
-        session.save_room_member(member)
+        await session.save_room_member(member)
         is_new_member = True
 
-    members = session.list_room_members(room.id)
-    strokes = session.list_strokes(room.id)
-    objects = session.list_objects(room.id)
-    turns = session.get_turns_for_room(room.id)
+    members = await session.list_room_members(room.id)
+    strokes = await session.list_strokes(room.id)
+    objects = await session.list_objects(room.id)
+    turns = await session.get_turns_for_room(room.id)
 
     if is_new_member:
         await record_audit_event(
