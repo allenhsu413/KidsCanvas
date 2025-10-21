@@ -1,8 +1,9 @@
-from uuid import uuid4
-
 import asyncio
 import math
 from uuid import uuid4
+
+import pytest
+from fastapi import HTTPException, status
 
 from ..api.routes.rooms import commit_object
 from ..core.database import Database
@@ -39,7 +40,9 @@ async def _run_commit_object_flow() -> None:
         await session.save_room(room)
         await session.save_stroke(stroke)
 
-    payload = ObjectCreatePayload(owner_id=user_id, stroke_ids=[stroke_id], label="castle")
+    payload = ObjectCreatePayload(
+        owner_id=user_id, stroke_ids=[stroke_id], label="castle"
+    )
 
     async with db.transaction() as session:
         response = await commit_object(
@@ -89,7 +92,10 @@ async def _run_commit_object_flow() -> None:
 
         audit_logs = await session.list_audit_logs(room_id)
         assert len(audit_logs) == 2
-        assert {log.event_type for log in audit_logs} == {"object.committed", "turn.created"}
+        assert {log.event_type for log in audit_logs} == {
+            "object.committed",
+            "turn.created",
+        }
 
     queue_items = await redis.list_events("turn:events")
     assert len(queue_items) == 1
@@ -97,3 +103,51 @@ async def _run_commit_object_flow() -> None:
     assert queued_event["event"] == "turn.waiting_for_ai"
     assert queued_event["room_id"] == str(room_id)
     assert queued_event["object_id"] == str(obj_payload.id)
+
+
+def test_commit_object_rejects_banned_label() -> None:
+    with pytest.raises(HTTPException) as excinfo:
+        asyncio.run(_run_commit_object_blocked())
+
+    assert excinfo.value.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    detail = excinfo.value.detail
+    assert isinstance(detail, dict)
+    assert detail.get("error") == "label_blocked"
+    assert "scary" in detail.get("reasons", [])
+
+
+async def _run_commit_object_blocked() -> None:
+    db = Database(database_url="sqlite+aiosqlite:///:memory:")
+    await db.create_all()
+    redis = RedisWrapper()
+
+    room_id = uuid4()
+    user_id = uuid4()
+    stroke_id = uuid4()
+
+    room = Room(id=room_id, name="Story Room")
+    stroke = Stroke(
+        id=stroke_id,
+        room_id=room_id,
+        author_id=user_id,
+        path=[Point(10.0, 15.0), Point(30.0, 45.0)],
+        color="#000000",
+        width=4.0,
+    )
+
+    async with db.transaction() as session:
+        await session.save_room(room)
+        await session.save_stroke(stroke)
+
+    payload = ObjectCreatePayload(
+        owner_id=user_id, stroke_ids=[stroke_id], label="Scary sword"
+    )
+
+    async with db.transaction() as session:
+        await commit_object(
+            room_id=room_id,
+            payload=payload,
+            session=session,
+            redis=redis,
+            subject=AuthenticatedSubject(user_id=user_id, role=UserRole.PLAYER),
+        )

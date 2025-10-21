@@ -39,8 +39,12 @@ const server = new WebSocketServer({ host: config.host, port: config.port });
 
 const rooms = new Map<string, Set<WebSocket>>();
 const context = new WeakMap<WebSocket, ConnectionContext>();
-const eventEndpoint = new URL('/api/internal/events/next', config.gameServiceUrl).toString();
+const eventEndpoint = new URL(
+  '/api/internal/events/next',
+  config.gameServiceUrl,
+);
 let running = true;
+let eventCursor: string | undefined;
 
 const nowIso = () => new Date().toISOString();
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -55,7 +59,9 @@ const createRateLimiter = (): RateLimiter => ({
 const consumeRateLimit = (limiter: RateLimiter): boolean => {
   const now = Date.now();
   if (now - limiter.lastRefill >= limiter.refillIntervalMs) {
-    const intervals = Math.floor((now - limiter.lastRefill) / limiter.refillIntervalMs);
+    const intervals = Math.floor(
+      (now - limiter.lastRefill) / limiter.refillIntervalMs,
+    );
     limiter.tokens = Math.min(
       limiter.capacity,
       limiter.tokens + intervals * limiter.capacity,
@@ -154,7 +160,10 @@ const joinRoom = (socket: WebSocket, roomId: string, userId?: string) => {
   return meta;
 };
 
-const leaveRoom = (socket: WebSocket, reason: 'leave' | 'disconnect' | 'switch' = 'leave') => {
+const leaveRoom = (
+  socket: WebSocket,
+  reason: 'leave' | 'disconnect' | 'switch' = 'leave',
+) => {
   const meta = context.get(socket);
   if (!meta) return;
   const roomSockets = rooms.get(meta.roomId);
@@ -177,7 +186,11 @@ const leaveRoom = (socket: WebSocket, reason: 'leave' | 'disconnect' | 'switch' 
   }
 };
 
-const broadcast = (roomId: string, message: MessageEnvelope, sender?: WebSocket) => {
+const broadcast = (
+  roomId: string,
+  message: MessageEnvelope,
+  sender?: WebSocket,
+) => {
   const roomSockets = rooms.get(roomId);
   if (!roomSockets) return;
   const raw = JSON.stringify(message);
@@ -191,21 +204,50 @@ const broadcast = (roomId: string, message: MessageEnvelope, sender?: WebSocket)
 const pollBackendEvents = async () => {
   while (running) {
     try {
-      const response = await fetch(eventEndpoint, {
-        headers: { Accept: 'application/json' },
+      const url = new URL(eventEndpoint);
+      if (eventCursor) {
+        url.searchParams.set('cursor', eventCursor);
+      }
+      url.searchParams.set('limit', '25');
+
+      const headers: Record<string, string> = { Accept: 'application/json' };
+      if (config.eventServiceKey) {
+        headers['X-Service-Key'] = config.eventServiceKey;
+      }
+
+      const response = await fetch(url, {
+        headers,
       });
       if (response.status === 204) {
         await sleep(config.eventPollIntervalMs);
         continue;
       }
       if (!response.ok) {
-        console.error('[gateway] Failed to fetch backend event', response.status, response.statusText);
+        console.error(
+          '[gateway] Failed to fetch backend event',
+          response.status,
+          response.statusText,
+        );
         await sleep(1000);
         continue;
       }
-      const parsed = (await response.json()) as MessageEnvelope | null;
-      if (parsed && typeof parsed.roomId === 'string') {
-        broadcast(parsed.roomId, parsed);
+      const parsed = (await response.json()) as {
+        cursor?: string;
+        events?: MessageEnvelope[];
+      } | null;
+      if (!parsed || !parsed.events || parsed.events.length === 0) {
+        await sleep(config.eventPollIntervalMs);
+        continue;
+      }
+
+      if (typeof parsed.cursor === 'string') {
+        eventCursor = parsed.cursor;
+      }
+
+      for (const event of parsed.events) {
+        if (event && typeof event.roomId === 'string') {
+          broadcast(event.roomId, event);
+        }
       }
     } catch (error: unknown) {
       console.error('[gateway] Event polling error', error);
@@ -214,7 +256,11 @@ const pollBackendEvents = async () => {
   }
 };
 
-const sendError = (socket: WebSocket, message: string, details: Record<string, unknown> = {}) => {
+const sendError = (
+  socket: WebSocket,
+  message: string,
+  details: Record<string, unknown> = {},
+) => {
   sendEnvelope(socket, {
     topic: 'system',
     roomId: details['roomId']?.toString() ?? '',
@@ -224,7 +270,10 @@ const sendError = (socket: WebSocket, message: string, details: Record<string, u
   });
 };
 
-const handleSystemMessage = (socket: WebSocket, envelope: MessageEnvelope<SystemPayload>) => {
+const handleSystemMessage = (
+  socket: WebSocket,
+  envelope: MessageEnvelope<SystemPayload>,
+) => {
   const action = envelope.action ?? 'ping';
   switch (action) {
     case 'join':
@@ -278,9 +327,17 @@ const handleSystemMessage = (socket: WebSocket, envelope: MessageEnvelope<System
   }
 };
 
-const normaliseEnvelope = (incoming: Record<string, unknown>, socket: WebSocket): MessageEnvelope => {
+const normaliseEnvelope = (
+  incoming: Record<string, unknown>,
+  socket: WebSocket,
+): MessageEnvelope => {
   const topic = incoming['topic'];
-  if (topic !== 'stroke' && topic !== 'object' && topic !== 'turn' && topic !== 'system') {
+  if (
+    topic !== 'stroke' &&
+    topic !== 'object' &&
+    topic !== 'turn' &&
+    topic !== 'system'
+  ) {
     throw new Error('Unknown topic');
   }
   const payload = incoming['payload'];
@@ -288,15 +345,22 @@ const normaliseEnvelope = (incoming: Record<string, unknown>, socket: WebSocket)
     throw new Error('payload must be an object');
   }
   const meta = context.get(socket);
-  const roomIdValue = (incoming['roomId'] ?? (payload as Record<string, unknown>)['roomId']) as string | undefined;
+  const roomIdValue = (incoming['roomId'] ??
+    (payload as Record<string, unknown>)['roomId']) as string | undefined;
   const roomId = roomIdValue ?? meta?.roomId;
   if (!roomId) {
     throw new Error('roomId missing from message');
   }
-  const timestamp = typeof incoming['timestamp'] === 'string' ? (incoming['timestamp'] as string) : nowIso();
+  const timestamp =
+    typeof incoming['timestamp'] === 'string'
+      ? (incoming['timestamp'] as string)
+      : nowIso();
   return {
     topic,
-    action: typeof incoming['action'] === 'string' ? (incoming['action'] as string) : undefined,
+    action:
+      typeof incoming['action'] === 'string'
+        ? (incoming['action'] as string)
+        : undefined,
     roomId,
     timestamp,
     payload: payload as Record<string, unknown>,
@@ -318,7 +382,10 @@ server.on('connection', (socket) => {
         sendError(socket, 'Payload too large');
         return;
       }
-      const parsed = JSON.parse(bufferFromRawData(data).toString()) as Record<string, unknown>;
+      const parsed = JSON.parse(bufferFromRawData(data).toString()) as Record<
+        string,
+        unknown
+      >;
       const envelope = normaliseEnvelope(parsed, socket);
       if (envelope.topic === 'system') {
         handleSystemMessage(socket, envelope as MessageEnvelope<SystemPayload>);
@@ -326,7 +393,9 @@ server.on('connection', (socket) => {
       }
       const meta = context.get(socket);
       if (!meta || meta.roomId !== envelope.roomId) {
-        sendError(socket, 'Join the room before sending events', { roomId: envelope.roomId });
+        sendError(socket, 'Join the room before sending events', {
+          roomId: envelope.roomId,
+        });
         return;
       }
       meta.lastSeen = Date.now();
@@ -355,7 +424,9 @@ server.on('connection', (socket) => {
 });
 
 server.on('listening', () => {
-  console.log(`Realtime Gateway listening on ws://${config.host}:${config.port}`);
+  console.log(
+    `Realtime Gateway listening on ws://${config.host}:${config.port}`,
+  );
   void pollBackendEvents();
 });
 
@@ -366,7 +437,10 @@ const heartbeat = () => {
       if (!meta) {
         continue;
       }
-      if (!meta.isAlive && Date.now() - meta.lastSeen > config.heartbeatToleranceMs) {
+      if (
+        !meta.isAlive &&
+        Date.now() - meta.lastSeen > config.heartbeatToleranceMs
+      ) {
         console.warn('Terminating stale connection', meta.roomId, meta.userId);
         socket.terminate();
         leaveRoom(socket, 'disconnect');

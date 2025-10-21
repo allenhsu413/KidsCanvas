@@ -1,4 +1,5 @@
 """Turn management helpers for the in-memory database."""
+
 from __future__ import annotations
 
 from uuid import UUID

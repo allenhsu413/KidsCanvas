@@ -15,6 +15,18 @@ export type AnchorRing = {
   outer: BBox;
 };
 
+export type SafetyCheckResult = {
+  category: string;
+  passed: boolean;
+  reasons: string[];
+};
+
+export type SafetySummary = {
+  passed: boolean;
+  results: SafetyCheckResult[];
+  reasons: string[];
+};
+
 export type Stroke = {
   id: string;
   authorId: string;
@@ -43,6 +55,7 @@ export type TurnEventPayload = {
   safetyStatus?: string;
   patch?: Record<string, unknown>;
   reason?: string;
+  safety?: SafetySummary;
 };
 
 export type MessageEnvelope<T = Record<string, unknown>> = {

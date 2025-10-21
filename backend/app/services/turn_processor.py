@@ -1,4 +1,5 @@
 """Asynchronous consumer that processes turn events and triggers the AI agent."""
+
 from __future__ import annotations
 
 import asyncio
@@ -34,6 +35,7 @@ except Exception:  # pragma: no cover - fallback when package unavailable
             lowered = [label.lower() for label in labels]
             triggers = [kw for kw in self._banned if kw in lowered]
             return SafetyResult(category="image", passed=not triggers, reasons=triggers)
+
 
 from ..core.database import Database, get_database
 from ..core.redis import RedisWrapper
@@ -109,7 +111,9 @@ class TurnProcessor:
         self._moderation = moderation_engine or ModerationEngine()
 
     async def start(self) -> None:
-        if self._task is not None and not self._task.done():  # pragma: no cover - defensive
+        if (
+            self._task is not None and not self._task.done()
+        ):  # pragma: no cover - defensive
             return
         self._stop_event.clear()
         if self._client is None:
@@ -158,7 +162,9 @@ class TurnProcessor:
             response = await client.post("/generate", json=request_payload)
             response.raise_for_status()
             data = response.json()
-        except Exception as exc:  # pragma: no cover - network failure path covered in tests
+        except (
+            Exception
+        ) as exc:  # pragma: no cover - network failure path covered in tests
             await self._mark_turn_blocked(event, reason=str(exc))
             return
 
@@ -176,7 +182,9 @@ class TurnProcessor:
 
         await self._mark_turn_completed(event, turn_snapshot, patch, cache_dir, safety)
 
-    async def _load_turn_context(self, event: TurnEvent) -> tuple[CanvasObject | None, Turn | None]:
+    async def _load_turn_context(
+        self, event: TurnEvent
+    ) -> tuple[CanvasObject | None, Turn | None]:
         database = self._database
         async with database.transaction() as session:
             try:
@@ -292,7 +300,9 @@ class TurnProcessor:
             },
         )
 
-    def _run_safety_checks(self, canvas_object: CanvasObject, patch: dict[str, Any]) -> "SafetySummary":
+    def _run_safety_checks(
+        self, canvas_object: CanvasObject, patch: dict[str, Any]
+    ) -> "SafetySummary":
         results: list[SafetyResult] = []
         instructions = patch.get("instructions")
         if isinstance(instructions, str) and instructions.strip():
@@ -301,7 +311,9 @@ class TurnProcessor:
         labels: list[str] = []
         patch_labels = patch.get("labels")
         if isinstance(patch_labels, list):
-            labels.extend([str(label) for label in patch_labels if isinstance(label, str)])
+            labels.extend(
+                [str(label) for label in patch_labels if isinstance(label, str)]
+            )
         if canvas_object.label:
             labels.append(canvas_object.label)
         if labels:
@@ -314,7 +326,9 @@ class TurnProcessor:
 
 
 @asynccontextmanager
-async def create_turn_processor(redis: RedisWrapper, *, agent_url: str, poll_interval: float = 0.5):
+async def create_turn_processor(
+    redis: RedisWrapper, *, agent_url: str, poll_interval: float = 0.5
+):
     processor = TurnProcessor(redis, agent_url=agent_url, poll_interval=poll_interval)
     await processor.start()
     try:

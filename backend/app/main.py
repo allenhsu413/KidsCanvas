@@ -1,4 +1,5 @@
 """FastAPI application entrypoint."""
+
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
@@ -38,7 +39,9 @@ def create_app() -> FastAPI:
 
     app = FastAPI(title=settings.app_name, lifespan=lifespan)
 
-    app.include_router(health_router, prefix=f"{settings.api_prefix}/health", tags=["health"])
+    app.include_router(
+        health_router, prefix=f"{settings.api_prefix}/health", tags=["health"]
+    )
     app.include_router(rooms_router, prefix=settings.api_prefix)
     app.include_router(strokes_router, prefix=settings.api_prefix)
     app.include_router(events_router, prefix=settings.api_prefix)

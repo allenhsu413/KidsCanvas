@@ -1,4 +1,5 @@
 """Database layer supporting both SQLAlchemy and in-memory fallbacks."""
+
 from __future__ import annotations
 
 import asyncio
@@ -31,10 +32,23 @@ from .config import get_settings
 
 try:  # pragma: no cover - optional dependency
     from sqlalchemy import Select, select, update
-    from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+    from sqlalchemy.ext.asyncio import (
+        AsyncEngine,
+        AsyncSession,
+        async_sessionmaker,
+        create_async_engine,
+    )
     from sqlalchemy.pool import StaticPool
 
-    from .db.models import AuditLogORM, Base, ObjectORM, RoomMemberORM, RoomORM, StrokeORM, TurnORM
+    from .db.models import (
+        AuditLogORM,
+        Base,
+        ObjectORM,
+        RoomMemberORM,
+        RoomORM,
+        StrokeORM,
+        TurnORM,
+    )
 
     SQLALCHEMY_AVAILABLE = True
 except ModuleNotFoundError:  # pragma: no cover - when dependencies missing
@@ -46,15 +60,21 @@ if SQLALCHEMY_AVAILABLE:  # pragma: no cover - exercised via integration tests
     class Database:
         """Async database facade that exposes high-level helpers used by services."""
 
-        def __init__(self, *, database_url: str | None = None, echo: bool = False) -> None:
+        def __init__(
+            self, *, database_url: str | None = None, echo: bool = False
+        ) -> None:
             settings = get_settings()
             self._database_url = database_url or settings.database_url
             engine_kwargs: dict[str, Any] = {"echo": echo, "future": True}
             if self._database_url.startswith("sqlite+aiosqlite"):
                 engine_kwargs["connect_args"] = {"check_same_thread": False}
                 engine_kwargs["poolclass"] = StaticPool
-            self._engine: AsyncEngine = create_async_engine(self._database_url, **engine_kwargs)
-            self._session_factory = async_sessionmaker(self._engine, expire_on_commit=False)
+            self._engine: AsyncEngine = create_async_engine(
+                self._database_url, **engine_kwargs
+            )
+            self._session_factory = async_sessionmaker(
+                self._engine, expire_on_commit=False
+            )
 
         async def create_all(self) -> None:
             async with self._engine.begin() as conn:
@@ -69,7 +89,6 @@ if SQLALCHEMY_AVAILABLE:  # pragma: no cover - exercised via integration tests
                 async with session.begin():
                     yield DatabaseSession(session)
 
-
     class DatabaseSession:
         """Wrap an AsyncSession with domain-specific helpers."""
 
@@ -83,7 +102,9 @@ if SQLALCHEMY_AVAILABLE:  # pragma: no cover - exercised via integration tests
             await self._session.execute(
                 update(RoomORM)
                 .where(RoomORM.id == room.id)
-                .values(name=room.name, turn_seq=room.turn_seq, created_at=room.created_at)
+                .values(
+                    name=room.name, turn_seq=room.turn_seq, created_at=room.created_at
+                )
             )
 
         async def get_room(self, room_id: UUID) -> Room:
@@ -94,7 +115,9 @@ if SQLALCHEMY_AVAILABLE:  # pragma: no cover - exercised via integration tests
 
         async def list_room_members(self, room_id: UUID) -> list[RoomMember]:
             stmt: Select[tuple[RoomMemberORM]] = (
-                select(RoomMemberORM).where(RoomMemberORM.room_id == room_id).order_by(RoomMemberORM.joined_at)
+                select(RoomMemberORM)
+                .where(RoomMemberORM.room_id == room_id)
+                .order_by(RoomMemberORM.joined_at)
             )
             result = await self._session.execute(stmt)
             return [row[0].to_domain() for row in result.all()]
@@ -113,7 +136,9 @@ if SQLALCHEMY_AVAILABLE:  # pragma: no cover - exercised via integration tests
 
         async def list_strokes(self, room_id: UUID) -> list[Stroke]:
             stmt: Select[tuple[StrokeORM]] = (
-                select(StrokeORM).where(StrokeORM.room_id == room_id).order_by(StrokeORM.ts)
+                select(StrokeORM)
+                .where(StrokeORM.room_id == room_id)
+                .order_by(StrokeORM.ts)
             )
             result = await self._session.execute(stmt)
             return [row[0].to_domain() for row in result.all()]
@@ -124,11 +149,15 @@ if SQLALCHEMY_AVAILABLE:  # pragma: no cover - exercised via integration tests
                 raise LookupError("stroke_not_found")
             return stroke.to_domain()
 
-        async def get_strokes(self, room_id: UUID, stroke_ids: Iterable[UUID]) -> list[Stroke]:
+        async def get_strokes(
+            self, room_id: UUID, stroke_ids: Iterable[UUID]
+        ) -> list[Stroke]:
             ids = list(stroke_ids)
             if not ids:
                 return []
-            stmt: Select[tuple[StrokeORM]] = select(StrokeORM).where(StrokeORM.id.in_(ids))
+            stmt: Select[tuple[StrokeORM]] = select(StrokeORM).where(
+                StrokeORM.id.in_(ids)
+            )
             result = await self._session.execute(stmt)
             strokes = {row[0].id: row[0].to_domain() for row in result.all()}
             missing = [stroke_id for stroke_id in ids if stroke_id not in strokes]
@@ -144,7 +173,9 @@ if SQLALCHEMY_AVAILABLE:  # pragma: no cover - exercised via integration tests
 
         async def update_stroke(self, stroke: Stroke, *, object_id: UUID) -> None:
             await self._session.execute(
-                update(StrokeORM).where(StrokeORM.id == stroke.id).values(object_id=object_id)
+                update(StrokeORM)
+                .where(StrokeORM.id == stroke.id)
+                .values(object_id=object_id)
             )
 
         async def save_object(self, obj: CanvasObject) -> None:
@@ -158,7 +189,9 @@ if SQLALCHEMY_AVAILABLE:  # pragma: no cover - exercised via integration tests
 
         async def list_objects(self, room_id: UUID) -> list[CanvasObject]:
             stmt: Select[tuple[ObjectORM]] = (
-                select(ObjectORM).where(ObjectORM.room_id == room_id).order_by(ObjectORM.created_at)
+                select(ObjectORM)
+                .where(ObjectORM.room_id == room_id)
+                .order_by(ObjectORM.created_at)
             )
             result = await self._session.execute(stmt)
             return [row[0].to_domain() for row in result.all()]
@@ -187,7 +220,9 @@ if SQLALCHEMY_AVAILABLE:  # pragma: no cover - exercised via integration tests
 
         async def get_turns_for_room(self, room_id: UUID) -> list[Turn]:
             stmt: Select[tuple[TurnORM]] = (
-                select(TurnORM).where(TurnORM.room_id == room_id).order_by(TurnORM.sequence)
+                select(TurnORM)
+                .where(TurnORM.room_id == room_id)
+                .order_by(TurnORM.sequence)
             )
             result = await self._session.execute(stmt)
             return [row[0].to_domain() for row in result.all()]
@@ -203,13 +238,17 @@ if SQLALCHEMY_AVAILABLE:  # pragma: no cover - exercised via integration tests
             result = await self._session.execute(stmt)
             return [row[0].to_domain() for row in result.all()]
 
-
 else:  # pragma: no cover - exercised in CI when SQLAlchemy unavailable
 
     class Database:
         """In-memory database fallback used when SQLAlchemy is unavailable."""
 
-        def __init__(self, *, database_url: str | None = None, storage_path: str | Path | None = None) -> None:
+        def __init__(
+            self,
+            *,
+            database_url: str | None = None,
+            storage_path: str | Path | None = None,
+        ) -> None:
             self._rooms: dict[UUID, Room] = {}
             self._strokes: dict[UUID, Stroke] = {}
             self._objects: dict[UUID, CanvasObject] = {}
@@ -219,7 +258,9 @@ else:  # pragma: no cover - exercised in CI when SQLAlchemy unavailable
             self._room_member_index: defaultdict[UUID, list[UUID]] = defaultdict(list)
             self._room_turn_index: defaultdict[UUID, list[UUID]] = defaultdict(list)
             self._lock = asyncio.Lock()
-            self._storage_path = Path(storage_path).expanduser() if storage_path else None
+            self._storage_path = (
+                Path(storage_path).expanduser() if storage_path else None
+            )
             if self._storage_path:
                 self._storage_path.parent.mkdir(parents=True, exist_ok=True)
                 self._load_from_disk()
@@ -245,11 +286,19 @@ else:  # pragma: no cover - exercised in CI when SQLAlchemy unavailable
                 return
             payload = {
                 "rooms": [self._serialise_room(room) for room in self._rooms.values()],
-                "strokes": [self._serialise_stroke(stroke) for stroke in self._strokes.values()],
-                "objects": [self._serialise_object(obj) for obj in self._objects.values()],
+                "strokes": [
+                    self._serialise_stroke(stroke) for stroke in self._strokes.values()
+                ],
+                "objects": [
+                    self._serialise_object(obj) for obj in self._objects.values()
+                ],
                 "turns": [self._serialise_turn(turn) for turn in self._turns.values()],
-                "audit_logs": [self._serialise_audit(log) for log in self._audit_logs.values()],
-                "members": [self._serialise_member(member) for member in self._members.values()],
+                "audit_logs": [
+                    self._serialise_audit(log) for log in self._audit_logs.values()
+                ],
+                "members": [
+                    self._serialise_member(member) for member in self._members.values()
+                ],
             }
             tmp_path = self._storage_path.with_suffix(".tmp")
             with tmp_path.open("w", encoding="utf-8") as fh:
@@ -262,19 +311,31 @@ else:  # pragma: no cover - exercised in CI when SQLAlchemy unavailable
             with self._storage_path.open("r", encoding="utf-8") as fh:
                 data = json.load(fh)
 
-            self._rooms = {UUID(item["id"]): self._deserialise_room(item) for item in data.get("rooms", [])}
+            self._rooms = {
+                UUID(item["id"]): self._deserialise_room(item)
+                for item in data.get("rooms", [])
+            }
             self._strokes = {
-                UUID(item["id"]): self._deserialise_stroke(item) for item in data.get("strokes", [])
+                UUID(item["id"]): self._deserialise_stroke(item)
+                for item in data.get("strokes", [])
             }
             self._objects = {
-                UUID(item["id"]): self._deserialise_object(item) for item in data.get("objects", [])
+                UUID(item["id"]): self._deserialise_object(item)
+                for item in data.get("objects", [])
             }
-            self._turns = {UUID(item["id"]): self._deserialise_turn(item) for item in data.get("turns", [])}
+            self._turns = {
+                UUID(item["id"]): self._deserialise_turn(item)
+                for item in data.get("turns", [])
+            }
             self._audit_logs = {
-                UUID(item["id"]): self._deserialise_audit(item) for item in data.get("audit_logs", [])
+                UUID(item["id"]): self._deserialise_audit(item)
+                for item in data.get("audit_logs", [])
             }
             self._members = {
-                (UUID(item["room_id"]), UUID(item["user_id"])): self._deserialise_member(item)
+                (
+                    UUID(item["room_id"]),
+                    UUID(item["user_id"]),
+                ): self._deserialise_member(item)
                 for item in data.get("members", [])
             }
 
@@ -327,7 +388,6 @@ else:  # pragma: no cover - exercised in CI when SQLAlchemy unavailable
 
         @classmethod
         def _deserialise_stroke(cls, data: dict[str, object]) -> Stroke:
-            from ..models import Point
 
             path = [cls._deserialise_point(point) for point in data.get("path", [])]  # type: ignore[arg-type]
             object_id = data.get("object_id")
@@ -464,7 +524,6 @@ else:  # pragma: no cover - exercised in CI when SQLAlchemy unavailable
                 joined_at=datetime.fromisoformat(str(data["joined_at"])),
             )
 
-
     class DatabaseSession:
         def __init__(self, db: Database) -> None:
             self._db = db
@@ -489,7 +548,10 @@ else:  # pragma: no cover - exercised in CI when SQLAlchemy unavailable
             return room
 
         async def list_room_members(self, room_id: UUID) -> list[RoomMember]:
-            members = [self._db._members[(room_id, user_id)] for user_id in self._db._room_member_index.get(room_id, [])]
+            members = [
+                self._db._members[(room_id, user_id)]
+                for user_id in self._db._room_member_index.get(room_id, [])
+            ]
             for member in self._pending_members:
                 if member.room_id == room_id and member not in members:
                     members.append(member)
@@ -508,8 +570,14 @@ else:  # pragma: no cover - exercised in CI when SQLAlchemy unavailable
             self._pending_strokes.append(stroke)
 
         async def list_strokes(self, room_id: UUID) -> list[Stroke]:
-            strokes = [stroke for stroke in self._db._strokes.values() if stroke.room_id == room_id]
-            strokes.extend(stroke for stroke in self._pending_strokes if stroke.room_id == room_id)
+            strokes = [
+                stroke
+                for stroke in self._db._strokes.values()
+                if stroke.room_id == room_id
+            ]
+            strokes.extend(
+                stroke for stroke in self._pending_strokes if stroke.room_id == room_id
+            )
             return sorted(strokes, key=lambda stroke: stroke.ts)
 
         async def get_stroke(self, stroke_id: UUID) -> Stroke:
@@ -518,7 +586,9 @@ else:  # pragma: no cover - exercised in CI when SQLAlchemy unavailable
                 raise LookupError("stroke_not_found")
             return stroke
 
-        async def get_strokes(self, room_id: UUID, stroke_ids: Iterable[UUID]) -> list[Stroke]:
+        async def get_strokes(
+            self, room_id: UUID, stroke_ids: Iterable[UUID]
+        ) -> list[Stroke]:
             found: list[Stroke] = []
             for stroke_id in stroke_ids:
                 stroke = self._db._strokes.get(stroke_id)
@@ -556,7 +626,10 @@ else:  # pragma: no cover - exercised in CI when SQLAlchemy unavailable
             return turn
 
         async def get_turns_for_room(self, room_id: UUID) -> list[Turn]:
-            return [self._db._turns[turn_id] for turn_id in self._db._room_turn_index.get(room_id, [])]
+            return [
+                self._db._turns[turn_id]
+                for turn_id in self._db._room_turn_index.get(room_id, [])
+            ]
 
         async def append_audit_log(self, log: AuditLog) -> None:
             self._pending_audit_logs.append(log)
@@ -621,7 +694,9 @@ def get_database() -> Database:
         if SQLALCHEMY_AVAILABLE:
             _db_instance = Database()
         else:
-            _db_instance = Database(storage_path=getattr(settings, "state_file", None) or None)
+            _db_instance = Database(
+                storage_path=getattr(settings, "state_file", None) or None
+            )
     return _db_instance
 
 

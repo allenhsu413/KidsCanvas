@@ -4,16 +4,17 @@ import os
 import sys
 from logging.config import fileConfig
 
-from alembic import context
 from sqlalchemy import engine_from_config, pool
+
+from alembic import context
 
 # Ensure the app package is importable when Alembic runs standalone.
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 if BASE_DIR not in sys.path:
     sys.path.append(BASE_DIR)
 
-from app.core.config import get_settings
-from app.core.db.models import Base
+from app.core.config import get_settings  # noqa: E402
+from app.core.db.models import Base  # noqa: E402
 
 config = context.config
 
@@ -48,7 +49,9 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata, compare_type=True)
+        context.configure(
+            connection=connection, target_metadata=target_metadata, compare_type=True
+        )
 
         with context.begin_transaction():
             context.run_migrations()

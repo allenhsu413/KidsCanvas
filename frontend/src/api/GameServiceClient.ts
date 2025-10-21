@@ -41,7 +41,9 @@ export class GameServiceClient {
   }
 
   async joinRoom(roomId: string, userId: string): Promise<RoomSnapshot> {
-    return this.post<RoomSnapshot>(`/rooms/${roomId}/join`, { user_id: userId });
+    return this.post<RoomSnapshot>(`/rooms/${roomId}/join`, {
+      user_id: userId,
+    });
   }
 
   async createStroke(
@@ -54,16 +56,26 @@ export class GameServiceClient {
       width: stroke.width,
       path: stroke.path,
     };
-    const response = await this.post<{ stroke: StrokeApiPayload }>(`/rooms/${roomId}/strokes`, payload);
+    const response = await this.post<{ stroke: StrokeApiPayload }>(
+      `/rooms/${roomId}/strokes`,
+      payload,
+    );
     return this.transformStroke(response.stroke);
   }
 
   async listStrokes(roomId: string): Promise<Stroke[]> {
-    const response = await this.get<{ strokes: StrokeApiPayload[] }>(`/rooms/${roomId}/strokes`);
+    const response = await this.get<{ strokes: StrokeApiPayload[] }>(
+      `/rooms/${roomId}/strokes`,
+    );
     return response.strokes.map((stroke) => this.transformStroke(stroke));
   }
 
-  async commitObject(roomId: string, ownerId: string, strokeIds: string[], label?: string): Promise<ObjectCommitResponse> {
+  async commitObject(
+    roomId: string,
+    ownerId: string,
+    strokeIds: string[],
+    label?: string,
+  ): Promise<ObjectCommitResponse> {
     return this.post<ObjectCommitResponse>(`/rooms/${roomId}/objects`, {
       owner_id: ownerId,
       stroke_ids: strokeIds,
@@ -92,7 +104,10 @@ export class GameServiceClient {
     return (await response.json()) as T;
   }
 
-  private async post<T>(path: string, body: Record<string, unknown>): Promise<T> {
+  private async post<T>(
+    path: string,
+    body: Record<string, unknown>,
+  ): Promise<T> {
     const url = `${this.baseUrl}${path}`;
     const response = await fetch(url, {
       method: 'POST',

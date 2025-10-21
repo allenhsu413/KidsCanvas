@@ -1,10 +1,14 @@
 """Settings for the AI agent service."""
+
 from functools import lru_cache
+
 from pydantic import BaseSettings, Field
 
 
 class AgentSettings(BaseSettings):
-    model_name: str = Field(default="fairytale-diffusion-mini", description="Primary generation model")
+    model_name: str = Field(
+        default="fairytale-diffusion-mini", description="Primary generation model"
+    )
     cache_dir: str = Field(default=".cache", description="Local cache for model assets")
 
     class Config:

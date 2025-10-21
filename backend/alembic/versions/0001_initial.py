@@ -1,9 +1,10 @@
 """Initial schema"""
+
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 revision = "0001_initial"
 down_revision = None
@@ -22,7 +23,12 @@ def upgrade() -> None:
 
     op.create_table(
         "room_members",
-        sa.Column("room_id", sa.String(length=36), sa.ForeignKey("rooms.id", ondelete="CASCADE"), primary_key=True),
+        sa.Column(
+            "room_id",
+            sa.String(length=36),
+            sa.ForeignKey("rooms.id", ondelete="CASCADE"),
+            primary_key=True,
+        ),
         sa.Column("user_id", sa.String(length=36), primary_key=True),
         sa.Column("role", sa.String(length=50), nullable=False),
         sa.Column("joined_at", sa.DateTime(timezone=True), nullable=False),
@@ -31,7 +37,12 @@ def upgrade() -> None:
     op.create_table(
         "objects",
         sa.Column("id", sa.String(length=36), primary_key=True),
-        sa.Column("room_id", sa.String(length=36), sa.ForeignKey("rooms.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "room_id",
+            sa.String(length=36),
+            sa.ForeignKey("rooms.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
         sa.Column("owner_id", sa.String(length=36), nullable=False),
         sa.Column("bbox", sa.JSON(), nullable=False),
         sa.Column("anchor_ring", sa.JSON(), nullable=False),
@@ -43,23 +54,42 @@ def upgrade() -> None:
     op.create_table(
         "strokes",
         sa.Column("id", sa.String(length=36), primary_key=True),
-        sa.Column("room_id", sa.String(length=36), sa.ForeignKey("rooms.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "room_id",
+            sa.String(length=36),
+            sa.ForeignKey("rooms.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
         sa.Column("author_id", sa.String(length=36), nullable=False),
         sa.Column("color", sa.String(length=50), nullable=False),
         sa.Column("width", sa.Float(), nullable=False),
         sa.Column("ts", sa.DateTime(timezone=True), nullable=False),
         sa.Column("path", sa.JSON(), nullable=False),
-        sa.Column("object_id", sa.String(length=36), sa.ForeignKey("objects.id", ondelete="SET NULL")),
+        sa.Column(
+            "object_id",
+            sa.String(length=36),
+            sa.ForeignKey("objects.id", ondelete="SET NULL"),
+        ),
     )
 
     op.create_table(
         "turns",
         sa.Column("id", sa.String(length=36), primary_key=True),
-        sa.Column("room_id", sa.String(length=36), sa.ForeignKey("rooms.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "room_id",
+            sa.String(length=36),
+            sa.ForeignKey("rooms.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
         sa.Column("sequence", sa.Integer(), nullable=False),
         sa.Column("status", sa.String(length=30), nullable=False),
         sa.Column("current_actor", sa.String(length=30), nullable=False),
-        sa.Column("source_object_id", sa.String(length=36), sa.ForeignKey("objects.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "source_object_id",
+            sa.String(length=36),
+            sa.ForeignKey("objects.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
         sa.Column("ai_patch_uri", sa.String(length=500)),
         sa.Column("safety_status", sa.String(length=50)),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
@@ -69,15 +99,26 @@ def upgrade() -> None:
     op.create_table(
         "audit_logs",
         sa.Column("id", sa.String(length=36), primary_key=True),
-        sa.Column("room_id", sa.String(length=36), sa.ForeignKey("rooms.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "room_id",
+            sa.String(length=36),
+            sa.ForeignKey("rooms.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
         sa.Column("user_id", sa.String(length=36)),
-        sa.Column("turn_id", sa.String(length=36), sa.ForeignKey("turns.id", ondelete="SET NULL")),
+        sa.Column(
+            "turn_id",
+            sa.String(length=36),
+            sa.ForeignKey("turns.id", ondelete="SET NULL"),
+        ),
         sa.Column("event_type", sa.String(length=120), nullable=False),
         sa.Column("payload", sa.JSON(), nullable=False),
         sa.Column("ts", sa.DateTime(timezone=True), nullable=False),
     )
 
-    op.create_index("ix_turns_room_sequence", "turns", ["room_id", "sequence"], unique=True)
+    op.create_index(
+        "ix_turns_room_sequence", "turns", ["room_id", "sequence"], unique=True
+    )
 
 
 def downgrade() -> None:

@@ -1,5 +1,7 @@
 """Application configuration using Pydantic settings."""
+
 from functools import lru_cache
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -15,9 +17,13 @@ class Environment(str):
 class AppSettings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
-    app_name: str = Field(default="InfiniteKidsCanvas Game Service", description="Service name")
+    app_name: str = Field(
+        default="InfiniteKidsCanvas Game Service", description="Service name"
+    )
     api_prefix: str = Field(default="/api", description="Base API prefix")
-    environment: str = Field(default=Environment.DEVELOPMENT, description="Runtime environment tag")
+    environment: str = Field(
+        default=Environment.DEVELOPMENT, description="Runtime environment tag"
+    )
     database_url: str = Field(
         default="postgresql+asyncpg://canvas:canvas@localhost:5432/canvas",
         description="SQLAlchemy database URL",
@@ -28,9 +34,7 @@ class AppSettings(BaseSettings):
     auth_secret_key: str = Field(
         default="dev-secret", description="HMAC secret for signing access tokens"
     )
-    auth_algorithm: str = Field(
-        default="HS256", description="JWT signing algorithm"
-    )
+    auth_algorithm: str = Field(default="HS256", description="JWT signing algorithm")
     access_token_expire_minutes: int = Field(
         default=60, description="Access token lifetime in minutes"
     )
@@ -45,7 +49,14 @@ class AppSettings(BaseSettings):
     )
     state_file: str | None = Field(
         default="data/state.json",
-        description="Path to JSON file used for prototype persistence (set to empty to disable)",
+        description=(
+            "Path to JSON file used for prototype persistence "
+            "(set to empty to disable)"
+        ),
+    )
+    realtime_service_key: str = Field(
+        default="dev-gateway-key",
+        description="Shared secret used by the realtime gateway when polling events",
     )
 
 

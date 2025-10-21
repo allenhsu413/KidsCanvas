@@ -1,4 +1,5 @@
 """WebSocket endpoints for room streaming with authentication."""
+
 from __future__ import annotations
 
 import asyncio

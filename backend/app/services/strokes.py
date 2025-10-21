@@ -1,4 +1,5 @@
 """Stroke management helpers for drawing synchronisation."""
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -20,7 +21,9 @@ async def _ensure_room(session: DatabaseSession, room_id: UUID) -> Room:
     try:
         return await session.get_room(room_id)
     except LookupError:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Room not found") from None
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Room not found"
+        ) from None
 
 
 def _serialise_stroke(stroke: Stroke) -> dict[str, object]:
@@ -47,7 +50,10 @@ async def create_stroke(
     width: float,
 ) -> Stroke:
     if not path:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Path must contain at least one point")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Path must contain at least one point",
+        )
 
     room = await _ensure_room(session, room_id)
 

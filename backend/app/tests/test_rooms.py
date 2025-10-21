@@ -1,5 +1,4 @@
 import asyncio
-import asyncio
 from uuid import uuid4
 
 from ..api.routes.rooms import create_room_endpoint, join_room_endpoint
@@ -44,4 +43,7 @@ async def _run_room_flow() -> None:
     assert join_response.room.id == create_response.room.id
     assert join_response.member.user_id == participant_id
     assert str(join_response.member.role) == "participant"
-    assert {member.user_id for member in join_response.members} == {host_id, participant_id}
+    assert {member.user_id for member in join_response.members} == {
+        host_id,
+        participant_id,
+    }

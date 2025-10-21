@@ -1,6 +1,9 @@
 import type { Stroke } from '../types';
 
-type CommitHandler = (selection: { strokeIds: string[]; label: string }) => void;
+type CommitHandler = (selection: {
+  strokeIds: string[];
+  label: string;
+}) => void;
 
 type StrokeMeta = {
   id: string;
@@ -88,7 +91,9 @@ export class ObjectPanel {
     if (!this.commitHandler) {
       return;
     }
-    const selected = [...this.strokes.values()].filter((stroke) => stroke.selected).map((stroke) => stroke.id);
+    const selected = [...this.strokes.values()]
+      .filter((stroke) => stroke.selected)
+      .map((stroke) => stroke.id);
     if (selected.length === 0) {
       return;
     }
