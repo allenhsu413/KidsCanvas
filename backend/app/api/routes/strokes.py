@@ -1,4 +1,5 @@
 """Stroke endpoints for the drawing canvas."""
+
 from __future__ import annotations
 
 from uuid import UUID
@@ -14,7 +15,8 @@ from ...schemas.strokes import (
     StrokeCreateResponse,
     StrokeSchema,
 )
-from ...services.strokes import create_stroke, list_strokes as list_strokes_service
+from ...services.strokes import create_stroke
+from ...services.strokes import list_strokes as list_strokes_service
 
 router = APIRouter(prefix="/rooms/{room_id}/strokes", tags=["strokes"])
 

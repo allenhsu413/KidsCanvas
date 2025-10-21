@@ -5,14 +5,14 @@ from collections import defaultdict
 from collections.abc import AsyncIterator
 from typing import Any
 
+from .config import get_settings
+
 try:  # pragma: no cover - optional dependency
     from redis.asyncio import Redis as _RedisClient  # type: ignore
 except ImportError:  # pragma: no cover - fallback path
     _RedisClient = None  # type: ignore
 
 TIMELINE_STREAM = "ws:timeline"
-
-from .config import get_settings
 
 
 class InMemoryEventStore:
@@ -25,7 +25,9 @@ class InMemoryEventStore:
         self._timeline: list[dict[str, Any]] = []
         self._timeline_seq = 0
 
-    async def enqueue_stream(self, stream: str, payload: dict[str, Any]) -> dict[str, Any]:
+    async def enqueue_stream(
+        self, stream: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
         self._sequences[stream] += 1
         sequence = self._sequences[stream]
         event = {**payload, "sequence": sequence, "stream": stream}
@@ -52,7 +54,9 @@ class InMemoryEventStore:
         raw = items.pop(0)
         return json.loads(raw)
 
-    async def next_timeline_event(self, cursor: str | None = None) -> dict[str, Any] | None:
+    async def next_timeline_event(
+        self, cursor: str | None = None
+    ) -> dict[str, Any] | None:
         if cursor is None:
             return self._timeline[0] if self._timeline else None
         for event in self._timeline:
@@ -60,7 +64,9 @@ class InMemoryEventStore:
                 return event
         return None
 
-    async def list_timeline(self, cursor: str | None = None, limit: int | None = None) -> list[dict[str, Any]]:
+    async def list_timeline(
+        self, cursor: str | None = None, limit: int | None = None
+    ) -> list[dict[str, Any]]:
         events = self._timeline
         if cursor is not None:
             events = [event for event in events if event["cursor"] > cursor]
@@ -75,12 +81,16 @@ class RedisEventStore:
     def __init__(self, client: Any) -> None:
         self._client = client
 
-    async def enqueue_stream(self, stream: str, payload: dict[str, Any]) -> dict[str, Any]:
+    async def enqueue_stream(
+        self, stream: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
         sequence = await self._client.incr(f"seq:{stream}")
         event = {**payload, "sequence": sequence, "stream": stream}
         await self._client.xadd(stream, {"data": json.dumps(event)}, maxlen=5000)
         timeline_event = dict(event)
-        entry_id = await self._client.xadd(TIMELINE_STREAM, {"data": json.dumps(timeline_event)}, maxlen=10000)
+        entry_id = await self._client.xadd(
+            TIMELINE_STREAM, {"data": json.dumps(timeline_event)}, maxlen=10000
+        )
         timeline_event["cursor"] = entry_id
         return timeline_event
 
@@ -113,9 +123,13 @@ class RedisEventStore:
             raw = raw.decode()
         return json.loads(raw)
 
-    async def next_timeline_event(self, cursor: str | None = None) -> dict[str, Any] | None:
+    async def next_timeline_event(
+        self, cursor: str | None = None
+    ) -> dict[str, Any] | None:
         start = "-" if cursor is None else f"({cursor})"
-        entries = await self._client.xrange(TIMELINE_STREAM, min=start, max="+", count=1)
+        entries = await self._client.xrange(
+            TIMELINE_STREAM, min=start, max="+", count=1
+        )
         if not entries:
             return None
         entry_id, fields = entries[0]
@@ -123,9 +137,13 @@ class RedisEventStore:
         data["cursor"] = entry_id
         return data
 
-    async def list_timeline(self, cursor: str | None = None, limit: int | None = None) -> list[dict[str, Any]]:
+    async def list_timeline(
+        self, cursor: str | None = None, limit: int | None = None
+    ) -> list[dict[str, Any]]:
         start = "-" if cursor is None else f"({cursor})"
-        entries = await self._client.xrange(TIMELINE_STREAM, min=start, max="+", count=limit)
+        entries = await self._client.xrange(
+            TIMELINE_STREAM, min=start, max="+", count=limit
+        )
         events: list[dict[str, Any]] = []
         for entry_id, fields in entries:
             data = json.loads(fields.get("data", "{}"))
@@ -139,8 +157,12 @@ class RedisWrapper:
 
     def __init__(self, redis_url: str | None = None) -> None:
         if _RedisClient is not None:
-            self._client = _RedisClient.from_url(redis_url or "redis://localhost:6379/0", decode_responses=True)
-            self._store: InMemoryEventStore | RedisEventStore = RedisEventStore(self._client)
+            self._client = _RedisClient.from_url(
+                redis_url or "redis://localhost:6379/0", decode_responses=True
+            )
+            self._store: InMemoryEventStore | RedisEventStore = RedisEventStore(
+                self._client
+            )
         else:
             self._client = None
             self._store = InMemoryEventStore()
@@ -174,13 +196,19 @@ class RedisWrapper:
     async def enqueue_turn_event(self, key: str, payload: dict[str, Any]) -> None:
         await self.enqueue_json(key, payload)
 
-    async def next_timeline_event(self, cursor: str | None = None) -> dict[str, Any] | None:
+    async def next_timeline_event(
+        self, cursor: str | None = None
+    ) -> dict[str, Any] | None:
         return await self._store.next_timeline_event(cursor)
 
-    async def list_timeline_events(self, cursor: str | None = None, limit: int | None = None) -> list[dict[str, Any]]:
+    async def list_timeline_events(
+        self, cursor: str | None = None, limit: int | None = None
+    ) -> list[dict[str, Any]]:
         return await self._store.list_timeline(cursor, limit)
 
-    async def raw_client(self) -> Any:  # pragma: no cover - used for dependency overrides
+    async def raw_client(
+        self,
+    ) -> Any:  # pragma: no cover - used for dependency overrides
         return self._client
 
 

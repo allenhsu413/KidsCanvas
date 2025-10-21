@@ -4,9 +4,11 @@ import { GameServiceClient } from './api/GameServiceClient';
 import { RealtimeClient } from './ws/RealtimeClient';
 import { ObjectPanel } from './ui/ObjectPanel';
 import { Toolbar } from './ui/Toolbar';
+import { AiTurnFeed } from './ui/AiTurnFeed';
 import type { AnchorRing, RoomSnapshot, Stroke } from './types';
 
-const backendBase = import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:8000/api';
+const backendBase =
+  import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:8000/api';
 const realtimeBase = import.meta.env.VITE_REALTIME_URL ?? 'ws://localhost:9001';
 
 const appRoot = document.querySelector<HTMLDivElement>('#app');
@@ -18,6 +20,7 @@ let statusTimeout: number | undefined;
 
 const toolbar = new Toolbar();
 const objectPanel = new ObjectPanel();
+const aiTurnFeed = new AiTurnFeed();
 const content = document.createElement('div');
 content.className = 'app-content';
 const canvasContainer = document.createElement('div');
@@ -25,7 +28,12 @@ canvasContainer.className = 'canvas-container';
 const canvasEl = document.createElement('canvas');
 canvasContainer.appendChild(canvasEl);
 content.appendChild(canvasContainer);
-content.appendChild(objectPanel.element);
+
+const sidePanels = document.createElement('div');
+sidePanels.className = 'side-panels';
+sidePanels.appendChild(objectPanel.element);
+sidePanels.appendChild(aiTurnFeed.element);
+content.appendChild(sidePanels);
 
 const statusBanner = document.createElement('div');
 statusBanner.className = 'status-banner';
@@ -55,16 +63,32 @@ const gameClient = new GameServiceClient(backendBase);
   });
 
   realtimeClient.on('turn', (payload) => {
-    const patch = payload.patch as { anchor?: AnchorRing } | undefined;
-    if (payload.status === 'ai_completed' || payload.status === 'AI_COMPLETED') {
+    const patch = payload.patch as
+      | { anchor?: AnchorRing; instructions?: string }
+      | undefined;
+    if (
+      payload.status === 'ai_completed' ||
+      payload.status === 'AI_COMPLETED'
+    ) {
       const anchorRing = (patch?.anchor ?? patch) as AnchorRing | undefined;
       if (anchorRing) {
-        canvas.showPatch(payload.turnId, anchorRing, payload.safetyStatus ?? 'passed');
+        canvas.showPatch(
+          payload.turnId,
+          anchorRing,
+          payload.safetyStatus ?? 'passed',
+          typeof patch?.instructions === 'string'
+            ? patch.instructions
+            : undefined,
+        );
         showStatus(`AI added a storybook detail (turn ${payload.sequence})`);
       }
     } else if (payload.status === 'blocked') {
-      showStatus('AI turn blocked for safety review');
+      const reason =
+        payload.safety?.reasons?.join(', ') ?? payload.reason ?? 'safety hold';
+      showStatus(`AI turn blocked: ${reason}`);
     }
+
+    aiTurnFeed.addTurn(payload, payload.patch);
   });
 
   realtimeClient.connect();
@@ -78,7 +102,12 @@ const gameClient = new GameServiceClient(backendBase);
 
   objectPanel.setCommitHandler(async ({ strokeIds, label }) => {
     try {
-      await gameClient.commitObject(roomId, userId, strokeIds, label || undefined);
+      await gameClient.commitObject(
+        roomId,
+        userId,
+        strokeIds,
+        label || undefined,
+      );
       showStatus('Object committed! Waiting for AI response…');
     } catch (error) {
       console.error(error);
@@ -147,7 +176,10 @@ function getOrCreateUserId(): string {
   return generated;
 }
 
-async function ensureRoom(client: GameServiceClient, userId: string): Promise<string> {
+async function ensureRoom(
+  client: GameServiceClient,
+  userId: string,
+): Promise<string> {
   const currentHash = window.location.hash.replace('#', '');
   if (currentHash) {
     return currentHash;
@@ -158,7 +190,11 @@ async function ensureRoom(client: GameServiceClient, userId: string): Promise<st
   return roomId;
 }
 
-async function loadSnapshot(client: GameServiceClient, roomId: string, userId: string): Promise<RoomSnapshot> {
+async function loadSnapshot(
+  client: GameServiceClient,
+  roomId: string,
+  userId: string,
+): Promise<RoomSnapshot> {
   try {
     const snapshot = await client.joinRoom(roomId, userId);
     return snapshot;

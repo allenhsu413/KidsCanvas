@@ -1,5 +1,7 @@
 """Configuration for the content safety service."""
+
 from functools import lru_cache
+
 from pydantic import BaseSettings, Field
 
 

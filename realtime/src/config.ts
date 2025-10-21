@@ -12,6 +12,7 @@ export interface GatewayConfig {
   rateLimit: RateLimitConfig;
   gameServiceUrl: string;
   eventPollIntervalMs: number;
+  eventServiceKey?: string;
 }
 
 const numberFromEnv = (key: string, fallback: number): number => {
@@ -35,4 +36,5 @@ export const loadConfig = (): GatewayConfig => ({
   },
   gameServiceUrl: process.env.GAME_SERVICE_URL ?? 'http://localhost:8000',
   eventPollIntervalMs: numberFromEnv('GATEWAY_EVENT_POLL_MS', 250),
+  eventServiceKey: process.env.GATEWAY_EVENT_SERVICE_KEY,
 });

@@ -1,4 +1,5 @@
 """Audit log utilities built on top of the in-memory database."""
+
 from __future__ import annotations
 
 from typing import Any

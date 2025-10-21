@@ -1,4 +1,5 @@
 """Health check endpoints for monitoring."""
+
 from fastapi import APIRouter
 
 from ...core.config import get_settings

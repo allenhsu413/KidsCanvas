@@ -1,4 +1,9 @@
-import type { MessageEnvelope, Stroke, TurnEventPayload } from '../types';
+import type {
+  MessageEnvelope,
+  SafetySummary,
+  Stroke,
+  TurnEventPayload,
+} from '../types';
 
 type EventHandler<T> = (payload: T) => void;
 
@@ -29,7 +34,11 @@ export class RealtimeClient {
   ) {}
 
   connect(): void {
-    if (this.socket && (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING)) {
+    if (
+      this.socket &&
+      (this.socket.readyState === WebSocket.OPEN ||
+        this.socket.readyState === WebSocket.CONNECTING)
+    ) {
       return;
     }
     this.socket = new WebSocket(this.url);
@@ -63,7 +72,9 @@ export class RealtimeClient {
   on(topic: 'turn', handler: EventHandler<TurnEventPayload>): void;
   on(topic: 'system', handler: EventHandler<Record<string, unknown>>): void;
   on(topic: keyof TopicHandlerMap, handler: EventHandler<unknown>): void {
-    (this.handlers[topic] as Set<EventHandler<unknown>>).add(handler as EventHandler<unknown>);
+    (this.handlers[topic] as Set<EventHandler<unknown>>).add(
+      handler as EventHandler<unknown>,
+    );
   }
 
   off(topic: 'stroke', handler: EventHandler<Stroke>): void;
@@ -71,7 +82,9 @@ export class RealtimeClient {
   off(topic: 'turn', handler: EventHandler<TurnEventPayload>): void;
   off(topic: 'system', handler: EventHandler<Record<string, unknown>>): void;
   off(topic: keyof TopicHandlerMap, handler: EventHandler<unknown>): void {
-    (this.handlers[topic] as Set<EventHandler<unknown>>).delete(handler as EventHandler<unknown>);
+    (this.handlers[topic] as Set<EventHandler<unknown>>).delete(
+      handler as EventHandler<unknown>,
+    );
   }
 
   sendStroke(stroke: Stroke): void {
@@ -103,9 +116,16 @@ export class RealtimeClient {
             authorId: String(payload['authorId'] ?? payload['author_id'] ?? ''),
             color: String(payload['color'] ?? '#000000'),
             width: Number(payload['width'] ?? 1),
-            path: Array.isArray(payload['path']) ? (payload['path'] as Stroke['path']) : [],
-            objectId: (payload['objectId'] ?? payload['object_id'] ?? null) as string | null,
-            ts: typeof payload['ts'] === 'string' ? (payload['ts'] as string) : undefined,
+            path: Array.isArray(payload['path'])
+              ? (payload['path'] as Stroke['path'])
+              : [],
+            objectId: (payload['objectId'] ?? payload['object_id'] ?? null) as
+              | string
+              | null,
+            ts:
+              typeof payload['ts'] === 'string'
+                ? (payload['ts'] as string)
+                : undefined,
           });
         }
         break;
@@ -118,6 +138,7 @@ export class RealtimeClient {
             safetyStatus: payload['safetyStatus']?.toString(),
             patch: (payload['patch'] as Record<string, unknown>) ?? undefined,
             reason: payload['reason']?.toString(),
+            safety: (payload['safety'] as SafetySummary) ?? undefined,
           });
         }
         break;

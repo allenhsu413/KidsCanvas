@@ -1,4 +1,5 @@
 """Pydantic schemas for stroke APIs."""
+
 from __future__ import annotations
 
 from datetime import datetime

@@ -74,7 +74,12 @@ export class InfiniteCanvas {
     this.requestRender();
   }
 
-  showPatch(id: string, anchorRing: AnchorRing, status: string, instructions?: string): void {
+  showPatch(
+    id: string,
+    anchorRing: AnchorRing,
+    status: string,
+    instructions?: string,
+  ): void {
     this.patches.set(id, { id, anchorRing, status, instructions });
     this.requestRender();
   }
@@ -93,10 +98,18 @@ export class InfiniteCanvas {
   }
 
   private setupEvents(): void {
-    this.canvas.addEventListener('pointerdown', (event) => this.handlePointerDown(event));
-    this.canvas.addEventListener('pointermove', (event) => this.handlePointerMove(event));
-    this.canvas.addEventListener('pointerup', (event) => this.handlePointerUp(event));
-    this.canvas.addEventListener('pointercancel', (event) => this.handlePointerUp(event));
+    this.canvas.addEventListener('pointerdown', (event) =>
+      this.handlePointerDown(event),
+    );
+    this.canvas.addEventListener('pointermove', (event) =>
+      this.handlePointerMove(event),
+    );
+    this.canvas.addEventListener('pointerup', (event) =>
+      this.handlePointerUp(event),
+    );
+    this.canvas.addEventListener('pointercancel', (event) =>
+      this.handlePointerUp(event),
+    );
     this.canvas.addEventListener('wheel', (event) => this.handleWheel(event));
   }
 
@@ -145,7 +158,10 @@ export class InfiniteCanvas {
     const worldPoint = this.toWorld(event.offsetX, event.offsetY);
     const points = this.activeStroke.path;
     const lastPoint = points[points.length - 1];
-    const distance = Math.hypot(worldPoint.x - lastPoint.x, worldPoint.y - lastPoint.y);
+    const distance = Math.hypot(
+      worldPoint.x - lastPoint.x,
+      worldPoint.y - lastPoint.y,
+    );
     if (distance > 1.5) {
       points.push(worldPoint);
       this.requestRender();
@@ -175,7 +191,10 @@ export class InfiniteCanvas {
   private handleWheel(event: WheelEvent): void {
     event.preventDefault();
     const scaleFactor = event.deltaY > 0 ? 0.9 : 1.1;
-    const newScale = Math.min(4, Math.max(0.2, this.camera.scale * scaleFactor));
+    const newScale = Math.min(
+      4,
+      Math.max(0.2, this.camera.scale * scaleFactor),
+    );
 
     const mouseWorld = this.toWorld(event.offsetX, event.offsetY);
     this.camera.scale = newScale;
@@ -197,21 +216,36 @@ export class InfiniteCanvas {
     const rect = this.canvas.getBoundingClientRect();
     this.canvas.width = rect.width * window.devicePixelRatio;
     this.canvas.height = rect.height * window.devicePixelRatio;
-    this.ctx.setTransform(window.devicePixelRatio, 0, 0, window.devicePixelRatio, 0, 0);
+    this.ctx.setTransform(
+      window.devicePixelRatio,
+      0,
+      0,
+      window.devicePixelRatio,
+      0,
+      0,
+    );
     this.requestRender();
   }
 
   private toWorld(screenX: number, screenY: number): Point {
     return {
-      x: (screenX - this.canvas.clientWidth / 2) / this.camera.scale + this.camera.x,
-      y: (screenY - this.canvas.clientHeight / 2) / this.camera.scale + this.camera.y,
+      x:
+        (screenX - this.canvas.clientWidth / 2) / this.camera.scale +
+        this.camera.x,
+      y:
+        (screenY - this.canvas.clientHeight / 2) / this.camera.scale +
+        this.camera.y,
     };
   }
 
   private toScreen(worldX: number, worldY: number): Point {
     return {
-      x: (worldX - this.camera.x) * this.camera.scale + this.canvas.clientWidth / 2,
-      y: (worldY - this.camera.y) * this.camera.scale + this.canvas.clientHeight / 2,
+      x:
+        (worldX - this.camera.x) * this.camera.scale +
+        this.canvas.clientWidth / 2,
+      y:
+        (worldY - this.camera.y) * this.camera.scale +
+        this.canvas.clientHeight / 2,
     };
   }
 
@@ -225,7 +259,14 @@ export class InfiniteCanvas {
     this.renderRequested = false;
     const { width, height } = this.canvas;
     this.ctx.save();
-    this.ctx.setTransform(window.devicePixelRatio, 0, 0, window.devicePixelRatio, 0, 0);
+    this.ctx.setTransform(
+      window.devicePixelRatio,
+      0,
+      0,
+      window.devicePixelRatio,
+      0,
+      0,
+    );
     this.ctx.clearRect(0, 0, width, height);
     this.ctx.restore();
 
@@ -307,24 +348,101 @@ export class InfiniteCanvas {
     ctx.globalAlpha = 0.1;
     ctx.fillStyle = patch.status === 'passed' ? '#6fcf97' : '#f2994a';
     this.fillBBox(patch.anchorRing.inner);
+    ctx.globalAlpha = 1;
+    this.drawPatchInstructions(patch);
     ctx.restore();
+  }
+
+  private drawPatchInstructions(patch: PatchOverlay): void {
+    if (!patch.instructions) return;
+
+    const ctx = this.ctx;
+    const outer = patch.anchorRing.outer;
+    const topLeft = this.toScreen(outer.x, outer.y);
+    const boxWidth = 260;
+    const padding = 12;
+    const lines = this.wrapText(
+      patch.instructions,
+      boxWidth - padding * 2,
+      '14px Nunito, sans-serif',
+    );
+    const boxHeight = lines.length * 18 + padding * 2;
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+    ctx.strokeStyle = patch.status === 'passed' ? '#6fcf97' : '#f2994a';
+    ctx.lineWidth = 1.5;
+    const x = topLeft.x;
+    const y = topLeft.y - boxHeight - 10;
+    ctx.beginPath();
+    ctx.roundRect(x, y, boxWidth, boxHeight, 12);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#2f4858';
+    ctx.font = '14px "Nunito", sans-serif';
+    ctx.textBaseline = 'top';
+    lines.forEach((line, index) => {
+      ctx.fillText(line, x + padding, y + padding + index * 18);
+    });
+    ctx.restore();
+  }
+
+  private wrapText(text: string, maxWidth: number, font: string): string[] {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.font = font;
+    const words = text.split(/\s+/);
+    const lines: string[] = [];
+    let current = '';
+    for (const word of words) {
+      const testLine = current ? `${current} ${word}` : word;
+      const metrics = ctx.measureText(testLine);
+      if (metrics.width > maxWidth && current) {
+        lines.push(current);
+        current = word;
+      } else {
+        current = testLine;
+      }
+    }
+    if (current) {
+      lines.push(current);
+    }
+    ctx.restore();
+    return lines;
   }
 
   private drawBBox(bbox: BBox): void {
     const ctx = this.ctx;
     const topLeft = this.toScreen(bbox.x, bbox.y);
-    const bottomRight = this.toScreen(bbox.x + bbox.width, bbox.y + bbox.height);
+    const bottomRight = this.toScreen(
+      bbox.x + bbox.width,
+      bbox.y + bbox.height,
+    );
     ctx.beginPath();
-    ctx.rect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
+    ctx.rect(
+      topLeft.x,
+      topLeft.y,
+      bottomRight.x - topLeft.x,
+      bottomRight.y - topLeft.y,
+    );
     ctx.stroke();
   }
 
   private fillBBox(bbox: BBox): void {
     const ctx = this.ctx;
     const topLeft = this.toScreen(bbox.x, bbox.y);
-    const bottomRight = this.toScreen(bbox.x + bbox.width, bbox.y + bbox.height);
+    const bottomRight = this.toScreen(
+      bbox.x + bbox.width,
+      bbox.y + bbox.height,
+    );
     ctx.beginPath();
-    ctx.rect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
+    ctx.rect(
+      topLeft.x,
+      topLeft.y,
+      bottomRight.x - topLeft.x,
+      bottomRight.y - topLeft.y,
+    );
     ctx.fill();
   }
 }

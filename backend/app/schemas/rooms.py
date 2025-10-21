@@ -1,7 +1,7 @@
 """Schemas for room creation and join flows."""
+
 from __future__ import annotations
 
-from datetime import datetime
 from datetime import datetime
 from typing import List
 from uuid import UUID

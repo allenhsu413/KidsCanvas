@@ -1,9 +1,6 @@
 import asyncio
 from uuid import uuid4
 
-import asyncio
-from uuid import uuid4
-
 import httpx
 
 from ..api.routes.rooms import commit_object
@@ -61,7 +58,9 @@ async def _run_turn_processor() -> None:
 
     async def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/generate"
-        return httpx.Response(200, json={"patch": {"mock": True}, "cacheDir": "/tmp/ai"})
+        return httpx.Response(
+            200, json={"patch": {"mock": True}, "cacheDir": "/tmp/ai"}
+        )
 
     transport = httpx.MockTransport(handler)
     client = httpx.AsyncClient(transport=transport, base_url="http://agent")

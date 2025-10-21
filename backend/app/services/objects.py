@@ -1,4 +1,5 @@
 """Business logic for player-created objects using the in-memory database."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -11,8 +12,28 @@ from ..core.database import DatabaseSession
 from ..core.redis import RedisWrapper
 from ..models import AnchorRing, BBox, CanvasObject, ObjectStatus, Room, Stroke, Turn
 from .audit import record_audit_event
-from .turns import create_turn_for_object
 from .strokes import broadcast_object_event
+from .turns import create_turn_for_object
+
+try:
+    from content_safety.app.policies.moderation import ModerationEngine
+except Exception:  # pragma: no cover - fallback when safety package unavailable
+
+    class ModerationEngine:  # type: ignore[redefinition]
+        def __init__(self) -> None:
+            self._banned = ["violence", "blood", "weapon", "scary", "alcohol"]
+
+        def evaluate_text(self, text: str):
+            lowered = text.lower()
+            triggers = [kw for kw in self._banned if kw in lowered]
+
+            class _Result:  # pragma: no cover - simple container
+                def __init__(self, passed: bool, reasons: list[str]) -> None:
+                    self.category = "text"
+                    self.passed = passed
+                    self.reasons = reasons
+
+            return _Result(not triggers, triggers)
 
 
 @dataclass(frozen=True)
@@ -66,6 +87,7 @@ async def create_object(
     stroke_ids: Sequence[UUID],
     label: str | None = None,
 ) -> tuple[CanvasObject, Turn, Room]:
+    moderation_engine = ModerationEngine()
     if not stroke_ids:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -75,7 +97,9 @@ async def create_object(
     try:
         room = await session.get_room(room_id)
     except LookupError:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Room not found") from None
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Room not found"
+        ) from None
 
     try:
         strokes = await session.get_strokes(room_id, stroke_ids)
@@ -87,13 +111,32 @@ async def create_object(
 
     assigned = [stroke.id for stroke in strokes if stroke.object_id is not None]
     if assigned:
+        assigned_list = ", ".join(str(sid) for sid in assigned)
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Strokes already assigned: {', '.join(str(sid) for sid in assigned)}",
+            detail=f"Strokes already assigned: {assigned_list}",
         )
 
     bbox = _compute_bbox(strokes)
     anchor_ring = _compute_anchor_ring(bbox)
+
+    if label:
+        safety = moderation_engine.evaluate_text(label)
+        if not safety.passed:
+            await record_audit_event(
+                session,
+                room_id=room.id,
+                user_id=owner_id,
+                event_type="object.blocked",
+                payload={
+                    "label": label,
+                    "reasons": list(safety.reasons),
+                },
+            )
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={"error": "label_blocked", "reasons": list(safety.reasons)},
+            )
 
     canvas_object = CanvasObject(
         room_id=room.id,

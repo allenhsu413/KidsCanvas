@@ -1,4 +1,5 @@
 """Simple moderation utilities for text and image payloads."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

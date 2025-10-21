@@ -63,25 +63,41 @@ class RoomORM(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     turn_seq: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
     )
 
     def to_domain(self) -> Room:
-        return Room(id=self.id, name=self.name, turn_seq=self.turn_seq, created_at=self.created_at)
+        return Room(
+            id=self.id,
+            name=self.name,
+            turn_seq=self.turn_seq,
+            created_at=self.created_at,
+        )
 
     @classmethod
     def from_domain(cls, room: Room) -> "RoomORM":
-        return cls(id=room.id, name=room.name, turn_seq=room.turn_seq, created_at=room.created_at)
+        return cls(
+            id=room.id,
+            name=room.name,
+            turn_seq=room.turn_seq,
+            created_at=room.created_at,
+        )
 
 
 class RoomMemberORM(Base):
     __tablename__ = "room_members"
 
-    room_id: Mapped[UUID] = mapped_column(GUID(), ForeignKey("rooms.id", ondelete="CASCADE"), primary_key=True)
+    room_id: Mapped[UUID] = mapped_column(
+        GUID(), ForeignKey("rooms.id", ondelete="CASCADE"), primary_key=True
+    )
     user_id: Mapped[UUID] = mapped_column(GUID(), primary_key=True)
     role: Mapped[str] = mapped_column(String(50), nullable=False)
     joined_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
     )
 
     def to_domain(self) -> RoomMember:
@@ -106,15 +122,21 @@ class StrokeORM(Base):
     __tablename__ = "strokes"
 
     id: Mapped[UUID] = mapped_column(GUID(), primary_key=True, default=uuid4)
-    room_id: Mapped[UUID] = mapped_column(GUID(), ForeignKey("rooms.id", ondelete="CASCADE"), nullable=False)
+    room_id: Mapped[UUID] = mapped_column(
+        GUID(), ForeignKey("rooms.id", ondelete="CASCADE"), nullable=False
+    )
     author_id: Mapped[UUID] = mapped_column(GUID(), nullable=False)
     color: Mapped[str] = mapped_column(String(50), nullable=False)
     width: Mapped[float] = mapped_column(Float, nullable=False)
     ts: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
     )
     path: Mapped[list[dict[str, float]]] = mapped_column(JSON, nullable=False)
-    object_id: Mapped[UUID | None] = mapped_column(GUID(), ForeignKey("objects.id", ondelete="SET NULL"))
+    object_id: Mapped[UUID | None] = mapped_column(
+        GUID(), ForeignKey("objects.id", ondelete="SET NULL")
+    )
 
     def to_domain(self) -> Stroke:
         points = [Point(float(item["x"]), float(item["y"])) for item in self.path]
@@ -147,14 +169,18 @@ class ObjectORM(Base):
     __tablename__ = "objects"
 
     id: Mapped[UUID] = mapped_column(GUID(), primary_key=True, default=uuid4)
-    room_id: Mapped[UUID] = mapped_column(GUID(), ForeignKey("rooms.id", ondelete="CASCADE"), nullable=False)
+    room_id: Mapped[UUID] = mapped_column(
+        GUID(), ForeignKey("rooms.id", ondelete="CASCADE"), nullable=False
+    )
     owner_id: Mapped[UUID] = mapped_column(GUID(), nullable=False)
     bbox: Mapped[dict[str, float]] = mapped_column(JSON, nullable=False)
     anchor_ring: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False)
     label: Mapped[str | None] = mapped_column(String(120))
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
     )
 
     def to_domain(self) -> CanvasObject:
@@ -187,18 +213,26 @@ class TurnORM(Base):
     __tablename__ = "turns"
 
     id: Mapped[UUID] = mapped_column(GUID(), primary_key=True, default=uuid4)
-    room_id: Mapped[UUID] = mapped_column(GUID(), ForeignKey("rooms.id", ondelete="CASCADE"), nullable=False)
+    room_id: Mapped[UUID] = mapped_column(
+        GUID(), ForeignKey("rooms.id", ondelete="CASCADE"), nullable=False
+    )
     sequence: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[str] = mapped_column(String(30), nullable=False)
     current_actor: Mapped[str] = mapped_column(String(30), nullable=False)
-    source_object_id: Mapped[UUID] = mapped_column(GUID(), ForeignKey("objects.id", ondelete="CASCADE"), nullable=False)
+    source_object_id: Mapped[UUID] = mapped_column(
+        GUID(), ForeignKey("objects.id", ondelete="CASCADE"), nullable=False
+    )
     ai_patch_uri: Mapped[str | None] = mapped_column(String(500))
     safety_status: Mapped[str | None] = mapped_column(String(50))
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
     )
 
     def to_domain(self) -> Turn:
@@ -235,13 +269,19 @@ class AuditLogORM(Base):
     __tablename__ = "audit_logs"
 
     id: Mapped[UUID] = mapped_column(GUID(), primary_key=True, default=uuid4)
-    room_id: Mapped[UUID] = mapped_column(GUID(), ForeignKey("rooms.id", ondelete="CASCADE"), nullable=False)
+    room_id: Mapped[UUID] = mapped_column(
+        GUID(), ForeignKey("rooms.id", ondelete="CASCADE"), nullable=False
+    )
     user_id: Mapped[UUID | None] = mapped_column(GUID())
-    turn_id: Mapped[UUID | None] = mapped_column(GUID(), ForeignKey("turns.id", ondelete="SET NULL"))
+    turn_id: Mapped[UUID | None] = mapped_column(
+        GUID(), ForeignKey("turns.id", ondelete="SET NULL")
+    )
     event_type: Mapped[str] = mapped_column(String(120), nullable=False)
     payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     ts: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
     )
 
     def to_domain(self) -> AuditLog:

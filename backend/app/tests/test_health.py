@@ -1,4 +1,5 @@
 """Unit tests for health endpoint."""
+
 from ..api.routes.health import read_health
 
 

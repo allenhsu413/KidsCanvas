@@ -1,4 +1,5 @@
 """Room lifecycle helpers for the prototype backend."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -66,7 +67,9 @@ async def join_room(
     try:
         room = await session.get_room(room_id)
     except LookupError:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Room not found") from None
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Room not found"
+        ) from None
 
     try:
         member = await session.get_room_member(room_id, user_id)
