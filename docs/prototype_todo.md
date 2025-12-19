@@ -33,7 +33,7 @@
 - [x] **Stroke API 與佇列**：建立 `/api/rooms/{roomId}/strokes` POST/GET，並將事件推入 `ws:events` 供即時同步。【F:backend/app/api/routes/strokes.py†L1-L41】【F:backend/app/services/strokes.py†L12-L104】
 - [x] **WS Protocol 套件化**：Realtime Gateway 具備統一 envelope、presence 與心跳控管，可轉發玩家送出的筆劃與系統訊息。【F:realtime/src/index.ts†L1-L353】
 - [x] **AI Turn webhook**：TurnProcessor 會消費 `turn:events`、呼叫 AI Agent 並將結果寫回審計／Redis 佇列。【F:backend/app/services/turn_processor.py†L1-L214】
-- [ ] **Backend ↔ Realtime 橋接**：新增背景程序訂閱 `ws:events`／`ws:object-events`，將 Backend/AI 事件推送至房間內所有連線（目前尚未實作）。【F:realtime/src/index.ts†L177-L317】
+- [x] **Backend ↔ Realtime 橋接**：Realtime Gateway 輪詢 `/api/internal/events/next` 並將 `ws:events`／`ws:object-events` 事件廣播至房間連線，後端同步維護事件 timeline cursor。【F:backend/app/api/routes/events.py†L1-L78】【F:realtime/src/index.ts†L177-L317】
 
 ### Phase 2：前端 Canvas Prototype — ✅ 已完成
 - [x] **Canvas 繪圖工具列**：`InfiniteCanvas` 支援平移、縮放、筆刷設定與繪圖事件；Toolbar 控制筆刷與視角重設。【F:frontend/src/canvas/InfiniteCanvas.ts†L12-L200】【F:frontend/src/ui/Toolbar.ts†L1-L59】
@@ -42,16 +42,61 @@
 - [x] **AI Patch 顯示**：收到 turn 事件後於畫布 Anchor Ring 呈現 AI patch 覆層與狀態提示。【F:frontend/src/main.ts†L57-L87】【F:frontend/src/canvas/InfiniteCanvas.ts†L77-L108】
 
 ### Phase 3：安全與審核基礎
-- [ ] **文本過濾**：在 backend 對物件標籤/提示進行黑名單檢查，失敗時阻擋並透過 WS 回傳安全訊息。
-- [ ] **影像佔位安全檢測**：為 AI patch 增加假實作的安全分數（可固定安全），為日後接入模型預留接口。
-- [ ] **審計查詢 API**：新增 `/api/rooms/{roomId}/audit` 用於追蹤事件。
-- [ ] **回放（基礎版）**：儲存 stroke/object/turn 事件順序，提供最簡回放 API（以 timestamp 過濾）。
+- [x] **文本過濾**：在 backend 對物件標籤/提示進行黑名單檢查，失敗時阻擋並透過 WS 回傳安全訊息。【F:backend/app/services/objects.py†L75-L190】
+- [x] **影像佔位安全檢測**：AI patch 產生固定 `safetyScore` 並由 TurnProcessor 評估安全摘要，預留接入模型的接口。【F:ai_agent/app/pipelines/patch_generation.py†L1-L27】【F:backend/app/services/turn_processor.py†L36-L214】
+- [x] **審計查詢 API**：新增 `/api/rooms/{roomId}/audit` 供事件追蹤查詢。【F:backend/app/api/routes/audit.py†L1-L36】
+- [x] **回放（基礎版）**：Timeline 事件可透過 `/api/rooms/{roomId}/replay` 以 timestamp 篩選回放。【F:backend/app/api/routes/replay.py†L1-L51】【F:backend/app/core/redis.py†L1-L176】
 
 ### Phase 4：穩定性與部署準備
-- [ ] **持久化策略**：視 Prototype 需求決定是否接上本地 PostgreSQL/Redis，或至少提供 dump/restore 工具以避免伺服器重啟即遺失資料。【F:backend/app/core/database.py†L1-L200】【F:backend/app/core/redis.py†L1-L87】
-- [ ] **測試覆蓋**：補上 WS integration 測試（pytest-asyncio）、AI pipeline 單元測試與前端單元測試（若建構工具允許）。
-- [ ] **開發腳本**：撰寫 `make dev`/`docker-compose` 方便一次啟動 backend、realtime、ai_agent。
-- [ ] **基本監控**：加入 Prometheus metrics 或最小 log 格式，以便 Prototype demo 時觀察系統狀態。
+- [x] **持久化策略**：內建 JSON state file 作為 Prototype dump/restore 機制，並可切換至 PostgreSQL/Redis。【F:backend/app/core/database.py†L260-L420】【F:backend/app/core/config.py†L27-L49】
+- [x] **測試覆蓋**：補上 WS replay/事件串流與 AI pipeline 測試，維持核心流程可回歸驗證。【F:backend/app/tests/test_audit_replay.py†L1-L72】【F:ai_agent/app/tests/test_patch_generation.py†L1-L9】
+- [x] **開發腳本**：新增 `make dev` 與 `scripts/dev.sh`，一鍵啟動 backend、realtime、ai_agent、frontend。【F:Makefile†L1-L12】【F:scripts/dev.sh†L1-L33】
+- [x] **基本監控**：提供 `/api/metrics` 作為最小監測指標輸出。【F:backend/app/api/routes/metrics.py†L1-L26】
 
 ---
-上述待辦可在 JIRA/Linear 等系統拆分為 Story/Task；短期應優先補上 Backend ↔ Realtime 橋接與安全審核雛形，以串起「玩家 → AI」迴路，後續再逐步推進 Phase 3-4 的長期強化項目。
+## 從安裝到執行
+
+以下步驟適用於本機開發環境（Python 3.11 + Node.js 18+）。
+
+### 1) 安裝依賴
+```bash
+# Backend
+cd backend
+python -m venv .venv
+source .venv/bin/activate
+pip install -e .[dev]
+
+# AI Agent
+cd ../ai_agent
+python -m venv .venv
+source .venv/bin/activate
+pip install -e .[dev]
+
+# Realtime Gateway
+cd ../realtime
+npm install
+
+# Frontend
+cd ../frontend
+npm install
+```
+
+### 2) 設定必要環境變數（可選）
+```bash
+export GATEWAY_EVENT_SERVICE_KEY=dev-gateway-key
+export GAME_SERVICE_URL=http://localhost:8000
+```
+
+### 3) 啟動服務
+```bash
+# 一鍵啟動（需要事先安裝依賴）
+make dev
+```
+
+或單獨啟動：
+```bash
+cd backend && python -m uvicorn app.main:app --reload --port 8000
+cd ai_agent && python -m uvicorn app.main:app --reload --port 8100
+cd realtime && npm run dev
+cd frontend && npm run dev -- --host
+```
