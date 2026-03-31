@@ -31,4 +31,5 @@ class PatchGenerationPipeline:
             "labels": motifs,
             "palette": palette,
             "confidence": 0.92,
+            "safetyScore": 0.99,
         }
